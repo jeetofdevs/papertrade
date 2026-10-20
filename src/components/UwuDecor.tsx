@@ -35,9 +35,9 @@ function Cloud({ className }: { className: string }) {
   );
 }
 
-function Cat() {
+export function Cat() {
   return (
-    <svg className="uwu-cat" viewBox="0 0 200 200">
+    <svg className="uwu-cat" viewBox="0 0 200 200" width="200" height="200" xmlns="http://www.w3.org/2000/svg">
       {/* tail */}
       <path d="M150 168 C 190 160, 192 110, 168 100 C 160 97, 156 106, 164 110 C 178 118, 172 150, 146 154 Z" fill="#cdb8ff" />
       {/* body */}
