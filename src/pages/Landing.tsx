@@ -49,7 +49,7 @@ const FAQ = [
   ],
   [
     'Is this real money?',
-    `Demo mode gives every account ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC with up to 1000x. Live mode trades real USDC on Hyperliquid's order book through an EVM wallet, with each market's own leverage limit.`,
+    `Demo mode gives every account ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC with up to 1000x. Live mode trades real USDC on Orderly Network's shared order book through an EVM wallet, with each market's own leverage limit.`,
   ],
 ];
 

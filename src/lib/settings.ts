@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 
 export interface Settings {
-  /** demo: local demo USDC. live: real USDC on Hyperliquid. */
+  /** demo: local demo USDC. live: real USDC on Orderly Network. */
   mode: 'demo' | 'live';
   chartType: 'tick' | 'candles';
   showEntries: boolean;

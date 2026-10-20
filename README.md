@@ -35,25 +35,31 @@ Optional variables (Settings → Variables), read at build time:
 | --- | --- | --- |
 | `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` or `testnet` |
 | `VITE_CONTRACT_ID` | _(empty)_ | NEAR contract account used for wallet sign-in |
-| `VITE_HL_NETWORK` | `mainnet` | Hyperliquid network for Live mode: `mainnet` or `testnet` |
-| `VITE_HL_BUILDER` | _(empty)_ | Your EVM address that earns the builder fee on Live trades |
-| `VITE_HL_BUILDER_FEE` | `0` | Builder fee in tenths of a basis point (`50` = 0.05%, max `100` = 0.1%) |
+| `VITE_ORDERLY_BROKER_ID` | _(empty)_ | Your Orderly broker (builder) ID. Live mode stays off until it is set |
+| `VITE_ORDERLY_NETWORK` | `mainnet` | Orderly network for Live mode: `mainnet` or `testnet` |
 
-## Live mode (Hyperliquid)
+## Live mode (Orderly Network)
 
-Switch the header toggle to **Live** to trade real USDC on Hyperliquid's order book. There is no Nitro pool
-behind Live trades, so Nitro carries no counterparty risk.
+Switch the header toggle to **Live** to trade real USDC on Orderly Network's shared order book. There is no
+Nitro pool behind Live trades.
 
-1. The trader connects an EVM wallet (MetaMask, Rabby…) that holds USDC on Hyperliquid.
-2. **Enable trading** asks for one-time signatures: the builder fee (only if `VITE_HL_BUILDER` is set) and a
-   trading key ("agent") that is stored in the browser. The agent can place and cancel orders but can never
-   withdraw funds.
-3. Orders are isolated-margin IOC orders at the mid price ± 1%, so the margin is the most a trader can lose.
-   An optional take profit is placed as a reduce-only trigger order.
+1. Register as an Orderly builder to get a broker ID (Orderly docs → Broker onboarding) and set
+   `VITE_ORDERLY_BROKER_ID`. Your fee rates are configured on Orderly's side for that broker.
+2. Traders connect an EVM wallet (MetaMask, Rabby…), create their Orderly account (one gasless signature) and
+   enable trading. That creates an Orderly trading key in the browser that can trade but never withdraw.
+3. Deposits go from the wallet's chain (for example Arbitrum) into Orderly from the **Deposit USDC** button.
+4. Orders are isolated-margin market orders, so the margin is the most a trader can lose, with an optional
+   take profit. Max leverage follows each Orderly market.
 
-To earn fees, set `VITE_HL_BUILDER` to your address and `VITE_HL_BUILDER_FEE`. Hyperliquid requires the
-builder address to hold at least 100 USDC in its perps account. Max leverage follows each Hyperliquid market
-(for example 10x on NEAR), not the 1000x of demo mode. Try `VITE_HL_NETWORK=testnet` first.
+Try `VITE_ORDERLY_NETWORK=testnet` first.
+
+## Auto deploy with GitHub Actions
+
+`.github/workflows/railway.yml` deploys to Railway on every push, even if Railway's own auto-deploy is off.
+Add two repository secrets (GitHub → Settings → Secrets and variables → Actions):
+
+- `RAILWAY_TOKEN`: Railway → project → Settings → Tokens → new project token
+- `RAILWAY_SERVICE_ID`: Railway → service → Settings → Service ID
 
 ## Project layout
 

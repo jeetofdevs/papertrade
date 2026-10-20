@@ -1,13 +1,7 @@
-import { useEffect } from 'react';
-import { startHl } from '../lib/hl/store';
 import { setSetting, useSettings } from '../lib/settings';
 
 export function ModeToggle() {
   const { mode } = useSettings();
-
-  useEffect(() => {
-    if (mode === 'live') startHl();
-  }, [mode]);
 
   return (
     <div className="mode" role="group" aria-label="Trading mode">
@@ -17,7 +11,7 @@ export function ModeToggle() {
       <button
         className={`mode-btn ${mode === 'live' ? 'mode-on mode-real' : ''}`}
         onClick={() => setSetting('mode', 'live')}
-        title="Real USDC on Hyperliquid"
+        title="Real USDC on Orderly Network"
       >
         Live
       </button>

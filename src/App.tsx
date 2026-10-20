@@ -8,7 +8,7 @@ import { ProfileMenu } from './components/ProfileMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
 import { startActivity } from './lib/activity';
-import { useHl } from './lib/hl/store';
+import { useLiveSummary } from './lib/live';
 import { useSettings } from './lib/settings';
 import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { usd } from './lib/format';
@@ -43,7 +43,7 @@ export function App() {
   const acct = account(useStore(), traderId);
   const inApp = !!accountId || ALLOW_GUEST;
   const { mode } = useSettings();
-  const hl = useHl();
+  const live = useLiveSummary();
 
   useEffect(() => {
     startPrices();
@@ -110,8 +110,8 @@ export function App() {
             </button>
           )}
           {inApp && mode === 'live' && (
-            <span className="balance mono" title="Hyperliquid account value">
-              {usd(hl.account?.accountValue ?? 0)} <span className="muted">USDC live</span>
+            <span className="balance mono" title="Orderly account value">
+              {usd(live.accountValue)} <span className="muted">USDC live</span>
             </span>
           )}
           {inApp && <SettingsMenu />}
@@ -128,7 +128,7 @@ export function App() {
       <footer className="foot">
         <span>
           {mode === 'live'
-            ? 'Nitro · live orders route to Hyperliquid · trading is risky · not financial advice'
+            ? 'Nitro · live orders route to Orderly Network · trading is risky · not financial advice'
             : 'Nitro · 1000x perps on NEAR · trading balances are demo funds · not financial advice'}
         </span>
         <span className="muted">

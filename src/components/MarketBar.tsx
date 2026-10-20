@@ -2,7 +2,7 @@ import { TokenIcon } from './TokenIcon';
 import { Market, MARKETS } from '../lib/engine';
 import { compact, pct, price } from '../lib/format';
 import { useActivity } from '../lib/activity';
-import { useHl } from '../lib/hl/store';
+import { useLiveSummary } from '../lib/live';
 import { useSettings } from '../lib/settings';
 import { usePrices } from '../lib/prices';
 
@@ -17,8 +17,8 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
   const { tickers } = usePrices();
   const { stats } = useActivity();
   const { mode } = useSettings();
-  const hl = useHl();
-  const maxLev = mode === 'live' ? (hl.assets?.[market]?.maxLeverage ?? '—') : 1000;
+  const live = useLiveSummary();
+  const maxLev = mode === 'live' ? (live.maxLeverage ?? '—') : 1000;
   const st = stats[market];
   const t = tickers[market];
   const change = t ? (t.price / t.open24h - 1) * 100 : 0;

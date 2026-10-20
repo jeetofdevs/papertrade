@@ -2240,7 +2240,7 @@ html.uwuless .top {
   background: linear-gradient(135deg, #ffe3f1, #e9dcff, #d6f5ff);
 }
 
-/* Live (Hyperliquid) setup */
+/* Live (Orderly) setup */
 .live-setup {
   display: grid;
   gap: 12px;
@@ -2511,4 +2511,14 @@ html.uwuless .top {
   .tracks {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+.live-off h3 {
+  margin-bottom: 8px;
+}
+.live-off p {
+  margin: 0;
+}
+.live-off code {
+  font-family: var(--mono);
+  color: var(--mint);
 }
