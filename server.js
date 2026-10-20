@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const root = join(import.meta.dirname, 'dist');
+const root = process.env.DIST_DIR || join(import.meta.dirname, 'dist');
 const port = process.env.PORT || 3000;
 const types = {
   '.html': 'text/html; charset=utf-8',

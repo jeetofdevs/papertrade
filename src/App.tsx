@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Logo } from './components/Logo';
 import { ModeToggle } from './components/ModeToggle';
+import { ProfileMenu } from './components/ProfileMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
 import { startActivity } from './lib/activity';
 import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
-import { shortAccount, usd } from './lib/format';
+import { usd } from './lib/format';
 import { startPrices } from './lib/prices';
 import { sound } from './lib/sound';
 import { dispatch, getState, onLiquidation, useStore } from './lib/store';
@@ -13,6 +14,7 @@ import { ALLOW_GUEST, NETWORK, useWallet } from './lib/wallet';
 import { Earn } from './pages/Earn';
 import { Landing } from './pages/Landing';
 import { Nitro } from './pages/Nitro';
+import { Profile } from './pages/Profile';
 import { Leaderboard } from './pages/Leaderboard';
 import { Trade } from './pages/Trade';
 
@@ -21,6 +23,7 @@ const ROUTES = {
   vault: { label: 'Vault', el: <Earn /> },
   leaderboard: { label: 'Leaderboard', el: <Leaderboard /> },
   nitro: { label: '$NITRO', el: <Nitro /> },
+  profile: { label: 'Profile', el: <Profile /> },
 } as const;
 type Route = keyof typeof ROUTES;
 
@@ -31,7 +34,7 @@ const readRoute = (): Route => {
 
 export function App() {
   const [route, setRoute] = useState<Route>(readRoute);
-  const { accountId, traderId, connect, disconnect, ready } = useWallet();
+  const { accountId, traderId, connect, ready } = useWallet();
   const acct = account(useStore(), traderId);
   const inApp = !!accountId || ALLOW_GUEST;
 
@@ -73,7 +76,7 @@ export function App() {
         </a>
         {inApp && (
         <nav className="nav">
-          {(Object.keys(ROUTES) as Route[]).map((r) => (
+          {(Object.keys(ROUTES) as Route[]).filter((r) => r !== 'profile').map((r) => (
             <a key={r} href={`#/${r}`} className={`nav-link ${route === r ? 'nav-on' : ''}`}>
               {ROUTES[r].label}
             </a>
@@ -92,10 +95,8 @@ export function App() {
             </button>
           )}
           {inApp && <SettingsMenu />}
-          {accountId ? (
-            <button className="btn btn-ghost" onClick={() => disconnect()} title="Disconnect">
-              {shortAccount(accountId)}
-            </button>
+          {inApp ? (
+            <ProfileMenu />
           ) : (
             <button className="btn btn-primary" onClick={connect} disabled={!ready}>
               Connect wallet
