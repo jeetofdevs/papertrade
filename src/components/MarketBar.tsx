@@ -1,3 +1,4 @@
+import { TokenIcon } from './TokenIcon';
 import { Market, MARKETS } from '../lib/engine';
 import { compact, pct, price } from '../lib/format';
 import { usePrices } from '../lib/prices';
@@ -27,7 +28,7 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
               className={`market-tab ${m === market ? 'market-tab-on' : ''}`}
               onClick={() => onChange(m)}
             >
-              <span className={`coin coin-${m}`}>{m[0]}</span>
+              <TokenIcon market={m} />
               <span>
                 <b>{m}-PERP</b>
                 <span className={`mono small ${c >= 0 ? 'up' : 'down'}`}>{price(x?.price)}</span>
@@ -37,6 +38,9 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
         })}
       </div>
       <div className="stats">
+        <div className="stat-token">
+          <TokenIcon market={market} size={34} />
+        </div>
         <div>
           <span className="label">{MARKET_NAME[market]}</span>
           <b className={`mono big ${change >= 0 ? 'up' : 'down'}`}>{price(t?.price)}</b>

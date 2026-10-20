@@ -1,3 +1,5 @@
+import { TokenIcon } from './TokenIcon';
+import { MARKET_NAME } from './MarketBar';
 import { useState } from 'react';
 import {
   account,
@@ -53,6 +55,13 @@ export function OrderPanel({ market }: { market: Market }) {
 
   return (
     <div className="panel order">
+      <div className="order-head">
+        <TokenIcon market={market} size={30} />
+        <div>
+          <b>{market}-PERP</b>
+          <span className="muted small">{MARKET_NAME[market]} · up to {MAX_LEVERAGE}x</span>
+        </div>
+      </div>
       <div className="seg">
         <button className={`seg-btn ${side === 'long' ? 'seg-long' : ''}`} onClick={() => setSide('long')}>
           Long
@@ -148,6 +157,7 @@ export function OrderPanel({ market }: { market: Market }) {
           onClick={submit}
           disabled={!mark || collateral <= 0}
         >
+          <TokenIcon market={market} size={22} />
           {side === 'long' ? 'Long' : 'Short'} {market} {lev}x
         </button>
       )}

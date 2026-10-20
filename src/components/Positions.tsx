@@ -1,3 +1,4 @@
+import { TokenIcon } from './TokenIcon';
 import { useState } from 'react';
 import { account, closePosition, unrealizedPnl } from '../lib/engine';
 import { compact, price, signed, usd } from '../lib/format';
@@ -62,7 +63,7 @@ export function Positions() {
                         <span className={`tag tag-${p.side}`}>
                           {p.side} {p.leverage}x
                         </span>{' '}
-                        <b>{p.market}</b>
+                        <span className="pair"><TokenIcon market={p.market} size={20} /><b>{p.market}</b></span>
                       </td>
                       <td className="mono">{usd(p.size)}</td>
                       <td className="mono">{usd(p.collateral)}</td>
@@ -105,7 +106,7 @@ export function Positions() {
                     <span className={`tag tag-${t.side}`}>
                       {t.side} {t.leverage}x
                     </span>{' '}
-                    <b>{t.market}</b>
+                    <span className="pair"><TokenIcon market={t.market} size={20} /><b>{t.market}</b></span>
                     {t.reason === 'liquidated' && <span className="tag tag-liq">liquidated</span>}
                   </td>
                   <td className="mono">{usd(t.size)}</td>

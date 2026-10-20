@@ -350,27 +350,33 @@ main {
   background: var(--panel-2);
   border-color: var(--border-2);
 }
-.coin {
-  width: 28px;
-  height: 28px;
+.token-icon {
+  flex-shrink: 0;
+  display: block;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 13px;
-  color: #06110d;
 }
-.coin-NEAR {
-  background: var(--mint);
+.stat-token {
+  display: flex;
+  align-items: center;
 }
-.coin-BTC {
-  background: #f7931a;
+.pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
 }
-.coin-ETH {
-  background: #8c9eff;
+.order-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.coin-SOL {
-  background: linear-gradient(135deg, #14f195, #9945ff);
+.order-head > div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.btn .token-icon {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
 }
 
 .stats {
