@@ -10,6 +10,8 @@ export const NETWORK = (import.meta.env.VITE_NEAR_NETWORK as 'testnet' | 'mainne
 export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || '';
 export const REAL_MODE_AVAILABLE = CONTRACT_ID !== '';
 export const GUEST = 'guest';
+/** Test builds only: let the app open without a wallet. */
+export const ALLOW_GUEST = import.meta.env.VITE_ALLOW_GUEST === 'true';
 
 interface WalletCtx {
   accountId: string | null;

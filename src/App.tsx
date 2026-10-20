@@ -9,8 +9,9 @@ import { shortAccount, usd } from './lib/format';
 import { startPrices } from './lib/prices';
 import { sound } from './lib/sound';
 import { dispatch, getState, onLiquidation, useStore } from './lib/store';
-import { NETWORK, useWallet } from './lib/wallet';
+import { ALLOW_GUEST, NETWORK, useWallet } from './lib/wallet';
 import { Earn } from './pages/Earn';
+import { Landing } from './pages/Landing';
 import { Nitro } from './pages/Nitro';
 import { Leaderboard } from './pages/Leaderboard';
 import { Trade } from './pages/Trade';
@@ -32,6 +33,7 @@ export function App() {
   const [route, setRoute] = useState<Route>(readRoute);
   const { accountId, traderId, connect, disconnect, ready } = useWallet();
   const acct = account(useStore(), traderId);
+  const inApp = !!accountId || ALLOW_GUEST;
 
   useEffect(() => {
     startPrices();
@@ -50,11 +52,12 @@ export function App() {
 
   // Every account, guest or wallet, starts with demo USDC.
   useEffect(() => {
+    if (!inApp) return;
     if (!getState().accounts[traderId]) {
       dispatch((s) => faucet(s, traderId, Date.now()));
       toast.ok(`Welcome! ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added to your account`);
     }
-  }, [traderId]);
+  }, [traderId, inApp]);
 
   const getUsdc = () => {
     const err = dispatch((s) => faucet(s, traderId, Date.now()));
@@ -68,6 +71,7 @@ export function App() {
         <a href="#/trade" className="brand" aria-label="Nitro home">
           <Logo />
         </a>
+        {inApp && (
         <nav className="nav">
           {(Object.keys(ROUTES) as Route[]).map((r) => (
             <a key={r} href={`#/${r}`} className={`nav-link ${route === r ? 'nav-on' : ''}`}>
@@ -75,16 +79,19 @@ export function App() {
             </a>
           ))}
         </nav>
+        )}
         <div className="top-right">
-          <ModeToggle />
+          {inApp && <ModeToggle />}
           <span className="net mono">
             <span className="near-dot" />
             NEAR {NETWORK}
           </span>
-          <button className="balance mono" onClick={getUsdc} title="Get demo USDC">
-            {usd(acct.usdc)} <span className="muted">USDC demo</span>
-          </button>
-          <SettingsMenu />
+          {inApp && (
+            <button className="balance mono" onClick={getUsdc} title="Get demo USDC">
+              {usd(acct.usdc)} <span className="muted">USDC demo</span>
+            </button>
+          )}
+          {inApp && <SettingsMenu />}
           {accountId ? (
             <button className="btn btn-ghost" onClick={() => disconnect()} title="Disconnect">
               {shortAccount(accountId)}
@@ -96,7 +103,7 @@ export function App() {
           )}
         </div>
       </header>
-      <main>{ROUTES[route].el}</main>
+      <main>{inApp ? ROUTES[route].el : <Landing />}</main>
       <footer className="foot">
         <span>
           Nitro · 1000x perps on NEAR · trading balances are demo funds · not financial advice

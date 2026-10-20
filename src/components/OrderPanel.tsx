@@ -28,7 +28,7 @@ const toSlider = (lev: number) => Math.round((Math.log(lev) / Math.log(MAX_LEVER
 const fromSlider = (v: number) => Math.max(1, Math.round(Math.exp((v / 1000) * Math.log(MAX_LEVERAGE))));
 
 export function OrderPanel({ market }: { market: Market }) {
-  const { traderId, accountId, connect } = useWallet();
+  const { traderId } = useWallet();
   const state = useStore();
   const { tickers } = usePrices();
   const acct = account(state, traderId);
@@ -175,15 +175,6 @@ export function OrderPanel({ market }: { market: Market }) {
         </button>
       )}
       {size > maxSize && <p className="hint err">Max size per position is {usd(maxSize, 0)} USDC (2% of the vault).</p>}
-      {!accountId && (
-        <p className="hint">
-          Trading as guest.{' '}
-          <button className="link" onClick={connect}>
-            Connect a NEAR wallet
-          </button>{' '}
-          to keep your own account.
-        </p>
-      )}
     </div>
   );
 }
