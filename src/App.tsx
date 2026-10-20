@@ -67,7 +67,7 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="top">
+      <header className={`top ${inApp ? '' : 'top-landing'}`}>
         <a href="#/trade" className="brand" aria-label="Nitro home">
           <Logo />
         </a>

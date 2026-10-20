@@ -226,3 +226,8 @@ export async function loadTicks(m: Market): Promise<Point[]> {
   }
   return [...bySecond.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
 }
+
+/** Recent raw ticks for a market (for sparklines). */
+export function getTicks(m: Market): Tick[] {
+  return ticks[m];
+}
