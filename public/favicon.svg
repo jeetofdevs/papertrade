@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="16" fill="#0B1210"/>
+  <!-- Folded paper strip forming an N -->
+  <path d="M13 12 L24 17 L24 53 L13 48 Z" fill="#F4F1E8"/>
+  <path d="M13 12 L24 17 L51 52 L40 47 Z" fill="#00EC97"/>
+  <path d="M13 12 L24 17 L19.2 20.8 Z" fill="#00B877"/>
+  <path d="M40 11 L51 16 L51 52 L40 47 Z" fill="#C9C4B5"/>
+  <path d="M40 47 L51 52 L44.5 43.5 Z" fill="#00B877"/>
+</svg>
