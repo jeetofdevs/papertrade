@@ -70,7 +70,7 @@ onTick(() => {
       const prev = before.accounts[id];
       const fresh = acct.history.filter((t) => t.reason === 'liquidated' && !prev?.history.some((h) => h.id === t.id));
       fresh.forEach((t) =>
-        liqListeners.forEach((l) => l(`${t.market} ${t.side} ${t.leverage}x liquidated — earned ${Math.round(t.nitro).toLocaleString()} NITRO`)),
+        liqListeners.forEach((l) => l(`${t.market} ${t.side} ${t.leverage}x hit max loss — earned ${Math.round(t.nitro).toLocaleString()} NITRO`)),
       );
     }
     set(next);

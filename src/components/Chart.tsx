@@ -98,7 +98,7 @@ export function Chart({ market, positions }: { market: Market; positions: Positi
       const color = p.side === 'long' ? '#00EC97' : '#FF5C7A';
       lines.push(
         s.createPriceLine({ price: p.entry, color, lineStyle: LineStyle.Solid, lineWidth: 1, title: `${p.side} ${p.leverage}x` }),
-        s.createPriceLine({ price: p.liq, color: '#FFB547', lineStyle: LineStyle.Dashed, lineWidth: 1, title: 'liq' }),
+        s.createPriceLine({ price: p.liq, color: '#FFB547', lineStyle: LineStyle.Dashed, lineWidth: 1, title: 'max loss' }),
       );
     }
     return () => {

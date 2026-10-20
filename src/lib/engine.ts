@@ -8,8 +8,11 @@ export type Side = 'long' | 'short';
 export const MARKETS: Market[] = ['NEAR', 'BTC', 'ETH', 'SOL'];
 export const MAX_LEVERAGE = 1000;
 export const MIN_COLLATERAL = 1;
-/** A position is liquidated once it has lost this share of its collateral. */
-export const LIQUIDATION_LOSS = 0.9;
+/**
+ * Moon-style risk: the collateral is the trader's wager and the most they can lose.
+ * A position closes automatically at the max loss price, where it has lost 100% of the wager.
+ */
+export const LIQUIDATION_LOSS = 1;
 /** NITRO tokens minted for every 1 USDC a trader loses. */
 export const NITRO_PER_USD_LOST = 10;
 /** One position can be at most this share of pool liquidity. */
@@ -134,7 +137,7 @@ export interface OpenParams {
 export function openPosition(state: State, id: string, p: OpenParams, mark: number, now: number): Result {
   const acct = account(state, id);
   if (!(mark > 0)) return { state, error: 'No price yet' };
-  if (!(p.collateral >= MIN_COLLATERAL)) return { state, error: `Minimum collateral is ${MIN_COLLATERAL} USDC` };
+  if (!(p.collateral >= MIN_COLLATERAL)) return { state, error: `Minimum wager is ${MIN_COLLATERAL} USDC` };
   if (!(p.leverage >= 1 && p.leverage <= MAX_LEVERAGE)) return { state, error: `Leverage must be 1x–${MAX_LEVERAGE}x` };
   if (p.collateral > acct.usdc + 1e-9) return { state, error: 'Insufficient USDC balance' };
   const size = p.collateral * p.leverage;

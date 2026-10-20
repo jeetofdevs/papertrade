@@ -1,3 +1,4 @@
+import { ShareCard, ShareData } from './ShareCard';
 import { TokenIcon } from './TokenIcon';
 import { useState } from 'react';
 import { account, closePosition, unrealizedPnl } from '../lib/engine';
@@ -8,7 +9,8 @@ import { useWallet } from '../lib/wallet';
 import { toast } from './Toasts';
 
 export function Positions() {
-  const { traderId } = useWallet();
+  const { traderId, accountId } = useWallet();
+  const [share, setShare] = useState<ShareData | null>(null);
   const state = useStore();
   const { tickers } = usePrices();
   const acct = account(state, traderId);
@@ -45,10 +47,10 @@ export function Positions() {
                 <tr>
                   <th>Market</th>
                   <th>Size</th>
-                  <th>Collateral</th>
+                  <th>Wager</th>
                   <th>Entry</th>
                   <th>Mark</th>
-                  <th>Liq.</th>
+                  <th>Max loss</th>
                   <th>PnL (ROE)</th>
                   <th />
                 </tr>
@@ -74,9 +76,30 @@ export function Positions() {
                         {signed(pnl)} <span className="muted">({((pnl / p.collateral) * 100).toFixed(1)}%)</span>
                       </td>
                       <td>
-                        <button className="btn btn-sm" onClick={() => close(p.id, mark)}>
-                          Close
-                        </button>
+                        <div className="row-actions">
+                          <button
+                            className="btn btn-sm"
+                            onClick={() =>
+                              setShare({
+                                market: p.market,
+                                side: p.side,
+                                leverage: p.leverage,
+                                pnl,
+                                wager: p.collateral,
+                                entry: p.entry,
+                                exit: mark,
+                                status: 'open',
+                                account: accountId,
+                                time: Date.now(),
+                              })
+                            }
+                          >
+                            Share
+                          </button>
+                          <button className="btn btn-sm" onClick={() => close(p.id, mark)}>
+                            Close
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -97,6 +120,7 @@ export function Positions() {
                 <th>PnL</th>
                 <th>NITRO earned</th>
                 <th>Closed</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -107,7 +131,7 @@ export function Positions() {
                       {t.side} {t.leverage}x
                     </span>{' '}
                     <span className="pair"><TokenIcon market={t.market} size={20} /><b>{t.market}</b></span>
-                    {t.reason === 'liquidated' && <span className="tag tag-liq">liquidated</span>}
+                    {t.reason === 'liquidated' && <span className="tag tag-liq">max loss</span>}
                   </td>
                   <td className="mono">{usd(t.size)}</td>
                   <td className="mono">{price(t.entry)}</td>
@@ -115,12 +139,34 @@ export function Positions() {
                   <td className={`mono ${t.pnl >= 0 ? 'up' : 'down'}`}>{signed(t.pnl)}</td>
                   <td className="mono accent">{t.nitro ? `+${compact(t.nitro)}` : '—'}</td>
                   <td className="muted">{new Date(t.closedAt).toLocaleTimeString('en-US')}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() =>
+                        setShare({
+                          market: t.market,
+                          side: t.side,
+                          leverage: t.leverage,
+                          pnl: t.pnl,
+                          wager: t.size / t.leverage,
+                          entry: t.entry,
+                          exit: t.exit,
+                          status: t.reason === 'liquidated' ? 'max loss' : 'closed',
+                          account: accountId,
+                          time: t.closedAt,
+                        })
+                      }
+                    >
+                      Share
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+      {share && <ShareCard data={share} onClose={() => setShare(null)} />}
     </div>
   );
 }

@@ -26,9 +26,9 @@ describe('engine', () => {
   });
 
   it('computes liquidation price', () => {
-    expect(liquidationPrice(100, 'long', 10)).toBeCloseTo(91);
-    expect(liquidationPrice(100, 'short', 10)).toBeCloseTo(109);
-    expect(liquidationPrice(100, 'long', 1000)).toBeCloseTo(99.91);
+    expect(liquidationPrice(100, 'long', 10)).toBeCloseTo(90);
+    expect(liquidationPrice(100, 'short', 10)).toBeCloseTo(110);
+    expect(liquidationPrice(100, 'long', 1000)).toBeCloseTo(99.9);
   });
 
   it('opens a position and locks collateral', () => {

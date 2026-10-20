@@ -39,7 +39,7 @@ export function OrderPanel({ market }: { market: Market }) {
   const size = collateral * lev;
   const liq = mark ? liquidationPrice(mark, side, lev) : 0;
   const maxSize = state.pool.liquidity * MAX_SIZE_OF_POOL;
-  const moveToLiq = (90 / lev).toFixed(lev >= 100 ? 3 : 2);
+  const moveToLiq = (100 / lev).toFixed(lev >= 100 ? 3 : 2);
 
   const submit = () => {
     const err = dispatch((s) => openPosition(s, traderId, { market, side, collateral, leverage: lev }, mark, Date.now()));
@@ -73,7 +73,7 @@ export function OrderPanel({ market }: { market: Market }) {
 
       <div className="field">
         <div className="field-head">
-          <label htmlFor="collateral">Collateral</label>
+          <label htmlFor="collateral">Wager (max loss)</label>
           <span className="muted">
             Demo balance <b className="mono">{usd(acct.usdc)}</b> USDC
           </span>
@@ -130,11 +130,11 @@ export function OrderPanel({ market }: { market: Market }) {
           <dd className="mono">{price(mark)}</dd>
         </div>
         <div>
-          <dt>Liquidation price</dt>
+          <dt>Max loss price</dt>
           <dd className="mono warn">{price(liq)}</dd>
         </div>
         <div>
-          <dt>Liquidated after</dt>
+          <dt>Max loss after</dt>
           <dd className="mono">{moveToLiq}% move</dd>
         </div>
         <div>
@@ -142,8 +142,8 @@ export function OrderPanel({ market }: { market: Market }) {
           <dd className="mono accent">0 · 0 · 0</dd>
         </div>
         <div>
-          <dt>NITRO if fully lost</dt>
-          <dd className="mono">{compact(collateral * 0.9 * NITRO_PER_USD_LOST)}</dd>
+          <dt>NITRO at max loss</dt>
+          <dd className="mono">{compact(collateral * NITRO_PER_USD_LOST)}</dd>
         </div>
       </dl>
 
