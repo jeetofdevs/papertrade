@@ -11,7 +11,7 @@ export function TradeTicker() {
   return (
     <div className="ticker panel" aria-label="Live trades">
       <span className="ticker-label">
-        <span className="feed-dot" /> Live
+        <span className="feed-dot" /> Live trades
       </span>
       <div className="ticker-track">
         {feed.slice(0, 24).map((a) => {
@@ -29,7 +29,7 @@ export function TradeTicker() {
             </span>
           );
         })}
-        {feed.length === 0 && <span className="muted small">Waiting for trades…</span>}
+        {feed.length === 0 && <span className="muted small">Waiting for real trades of $25K+ on NEAR, BTC, ETH and SOL…</span>}
       </div>
     </div>
   );

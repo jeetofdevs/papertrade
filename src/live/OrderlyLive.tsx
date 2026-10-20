@@ -19,6 +19,7 @@ import {
 } from '@orderly.network/hooks';
 import { AccountStatusEnum, ChainNamespace, MarginMode, OrderSide, OrderType } from '@orderly.network/types';
 import { Chart } from '../components/Chart';
+import { showTradeResult } from '../components/Celebration';
 import { confirmDialog } from '../components/Confirm';
 import { MARKET_NAME } from '../components/MarketBar';
 import { ShareCard, ShareData } from '../components/ShareCard';
@@ -536,6 +537,22 @@ function LivePositions() {
       if (r.unrealized_pnl >= 0) sound.win();
       else sound.loss();
       toast[r.unrealized_pnl >= 0 ? 'ok' : 'info'](`Closed for about ${signed(r.unrealized_pnl)} USDC`);
+      const m = marketOf(r.symbol);
+      if (m) {
+        showTradeResult({
+          market: m,
+          side: r.position_qty > 0 ? 'long' : 'short',
+          leverage: r.leverage ?? 1,
+          pnl: r.unrealized_pnl,
+          wager: Math.abs(r.notional) / Math.max(1, r.leverage ?? 1),
+          entry: r.average_open_price,
+          exit: r.mark_price,
+          status: 'closed',
+          account: null,
+          time: Date.now(),
+          reason: 'close',
+        });
+      }
     } catch (e) {
       toast.err((e as Error)?.message || 'Close failed');
     } finally {

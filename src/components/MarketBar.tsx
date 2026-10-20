@@ -66,15 +66,15 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
           <b className="mono">{price(t?.low24h)}</b>
         </div>
         <div className="hide-sm">
-          <span className="label">Vol 24h</span>
-          <b className="mono">${compact(st.volume24h)}</b>
+          <span className="label" title="Binance spot 24h volume">Market vol 24h</span>
+          <b className="mono">${compact(st.marketVolume24h)}</b>
         </div>
         <div>
-          <span className="label">Long OI</span>
+          <span className="label" title="Open long positions on Nitro">Nitro long OI</span>
           <b className="mono up">${compact(st.longOi)}</b>
         </div>
         <div>
-          <span className="label">Short OI</span>
+          <span className="label" title="Open short positions on Nitro">Nitro short OI</span>
           <b className="mono down">${compact(st.shortOi)}</b>
         </div>
         <div>

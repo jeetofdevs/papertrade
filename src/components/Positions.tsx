@@ -1,6 +1,7 @@
 import { getSettings } from '../lib/settings';
 import { sound } from '../lib/sound';
 import { confirmDialog } from './Confirm';
+import { resultFromTrade, showTradeResult } from './Celebration';
 import { ShareCard, ShareData } from './ShareCard';
 import { TokenIcon } from './TokenIcon';
 import { useState } from 'react';
@@ -36,6 +37,7 @@ export function Positions() {
     if (!t || before.history[0]?.id === t.id) return;
     if (t.pnl >= 0) sound.win();
     else sound.loss();
+    showTradeResult(resultFromTrade(t, accountId));
     toast[t.pnl >= 0 ? 'ok' : 'info'](
       t.pnl >= 0 ? `Closed for ${signed(t.pnl)} USDC` : `Closed for ${signed(t.pnl)} USDC · +${compact(t.nitro)} NITRO`,
     );

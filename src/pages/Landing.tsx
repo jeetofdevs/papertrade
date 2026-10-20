@@ -90,6 +90,7 @@ export function Landing() {
     return () => io.disconnect();
   }, []);
 
+  const marketVol = MARKETS.reduce((s, m) => s + stats[m].marketVolume24h, 0);
   const vol = MARKETS.reduce((s, m) => s + stats[m].volume24h, 0);
   const oi = MARKETS.reduce((s, m) => s + stats[m].longOi + stats[m].shortOi, 0);
   const near = tickers.NEAR;
@@ -169,10 +170,10 @@ export function Landing() {
 
       <section className="lp-stats">
         {[
-          ['24h volume', `$${compact(vol)}`],
-          ['Open interest', `$${compact(oi)}`],
+          ['Market volume 24h', `$${compact(marketVol)}`],
+          ['Nitro volume 24h', `$${compact(vol)}`],
+          ['Nitro open interest', `$${compact(oi)}`],
           ['Max leverage', `${MAX_LEVERAGE}x`],
-          ['Trading fees', '$0'],
         ].map(([l, v]) => (
           <div key={l} className="lp-stat">
             <b className="mono">{v}</b>
@@ -184,7 +185,7 @@ export function Landing() {
       <section className="lp-section">
         <div className="lp-head">
           <h2>Markets</h2>
-          <span className="muted small">Live mark prices</span>
+          <span className="muted small">Live prices and 24h volume from Binance</span>
         </div>
         <div className="lp-markets">
           {MARKETS.map((m) => {

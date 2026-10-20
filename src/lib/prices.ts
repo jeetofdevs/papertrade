@@ -29,6 +29,21 @@ let snap: Snapshot = { source: 'connecting', tickers: {}, version: 0 };
 const ticks: Record<Market, Tick[]> = { NEAR: [], BTC: [], ETH: [], SOL: [] };
 const listeners = new Set<() => void>();
 const tickListeners = new Set<(m: Market, t: Tick) => void>();
+
+/** A real trade on Binance spot, from the aggTrade stream. */
+export interface MarketTrade {
+  market: Market;
+  price: number;
+  usd: number;
+  /** true when the taker bought (price lifted). */
+  buy: boolean;
+  time: number;
+}
+const tradeListeners = new Set<(t: MarketTrade) => void>();
+export function onMarketTrade(fn: (t: MarketTrade) => void) {
+  tradeListeners.add(fn);
+  return () => tradeListeners.delete(fn);
+}
 let started = false;
 
 function emit() {
@@ -103,6 +118,8 @@ function connectSocket() {
     const m = MARKETS.find((x) => SYMBOL[x] === msg.data?.s);
     if (!m) return;
     push(m, +msg.data.p, msg.data.T);
+    const trade: MarketTrade = { market: m, price: +msg.data.p, usd: +msg.data.p * +msg.data.q, buy: !msg.data.m, time: msg.data.T };
+    tradeListeners.forEach((l) => l(trade));
     if (!pending) {
       pending = true;
       requestAnimationFrame(() => {
