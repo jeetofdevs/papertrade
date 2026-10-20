@@ -10,7 +10,7 @@ import { useWallet } from '../lib/wallet';
 export function Trade() {
   const [market, setMarket] = useState<Market>(() => {
     try {
-      return (localStorage.getItem('kami:market') as Market) || 'NEAR';
+      return (localStorage.getItem('nitro:market') as Market) || 'NEAR';
     } catch {
       return 'NEAR';
     }
@@ -20,7 +20,7 @@ export function Trade() {
   const pick = (m: Market) => {
     setMarket(m);
     try {
-      localStorage.setItem('kami:market', m);
+      localStorage.setItem('nitro:market', m);
     } catch {
       /* ignore */
     }

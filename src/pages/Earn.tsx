@@ -21,7 +21,7 @@ export function Earn() {
         : dispatch((s) => poolWithdraw(s, traderId, value / sp));
     if (err) toast.err(err);
     else {
-      toast.ok(mode === 'deposit' ? `Deposit ${usd(value)} USDC berhasil` : `Penarikan ${usd(value)} USDC berhasil`);
+      toast.ok(mode === 'deposit' ? `Deposited ${usd(value)} USDC` : `Withdrew ${usd(value)} USDC`);
       setAmount('');
     }
   };
@@ -32,35 +32,35 @@ export function Earn() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>Kami Vault</h1>
+        <h1>Nitro Vault</h1>
         <p>
-          Vault adalah lawan dari setiap trade. Saat trader rugi, vault untung. Setor USDC, terima
-          <b> kLP</b>, dan ikut menikmati keuntungan bandar.
+          The vault is the other side of every trade. When traders lose, the vault earns. Deposit USDC, receive
+          <b> nLP</b>, and share in the house edge.
         </p>
       </header>
 
       <div className="cards">
-        <Stat label="Likuiditas vault" value={`$${compact(state.pool.liquidity)}`} />
-        <Stat label="Harga kLP" value={`$${sp.toFixed(4)}`} accent={sp >= 1} />
-        <Stat label="kLP Anda" value={compact(acct.lpShares)} />
-        <Stat label="Nilai vault Anda" value={`$${usd(myValue)}`} />
+        <Stat label="Vault liquidity" value={`$${compact(state.pool.liquidity)}`} />
+        <Stat label="nLP price" value={`$${sp.toFixed(4)}`} accent={sp >= 1} />
+        <Stat label="Your nLP" value={compact(acct.lpShares)} />
+        <Stat label="Your vault value" value={`$${usd(myValue)}`} />
       </div>
 
       <div className="split">
         <div className="panel pad">
           <div className="seg">
             <button className={`seg-btn ${mode === 'deposit' ? 'seg-long' : ''}`} onClick={() => setMode('deposit')}>
-              Setor
+              Deposit
             </button>
             <button className={`seg-btn ${mode === 'withdraw' ? 'seg-short' : ''}`} onClick={() => setMode('withdraw')}>
-              Tarik
+              Withdraw
             </button>
           </div>
           <div className="field">
             <div className="field-head">
-              <label htmlFor="vault-amt">Jumlah</label>
+              <label htmlFor="vault-amt">Amount</label>
               <span className="muted">
-                Tersedia <b className="mono">{usd(max)}</b> USDC
+                Available <b className="mono">{usd(max)}</b> USDC
               </span>
             </div>
             <div className="input">
@@ -77,22 +77,22 @@ export function Earn() {
             </div>
           </div>
           <p className="muted small">
-            Anda {mode === 'deposit' ? 'menerima' : 'membakar'} ≈ <b className="mono">{compact(value / sp)}</b> kLP
+            You {mode === 'deposit' ? 'receive' : 'burn'} ≈ <b className="mono">{compact(value / sp)}</b> nLP
           </p>
           <button className="btn btn-primary btn-block" onClick={submit} disabled={value <= 0}>
-            {mode === 'deposit' ? 'Setor USDC' : 'Tarik USDC'}
+            {mode === 'deposit' ? 'Deposit USDC' : 'Withdraw USDC'}
           </button>
         </div>
 
         <div className="panel pad prose">
-          <h3>Cara kerja vault</h3>
+          <h3>How the vault works</h3>
           <ol>
-            <li>Trader membuka posisi hingga 1000x melawan vault. Tanpa order book dan tanpa slippage.</li>
-            <li>Kolateral dari trade yang rugi dan terlikuidasi masuk ke vault, sehingga harga kLP naik.</li>
-            <li>Trade yang untung dibayar dari vault. Jika vault kekurangan dana, profit masuk antrean dan dibayar saat likuiditas kembali.</li>
-            <li>Setiap posisi dibatasi maksimal 2% dari likuiditas vault agar satu trade tidak terlalu berdampak.</li>
+            <li>Traders open positions up to 1000x against the vault. No order book, no slippage.</li>
+            <li>Losing trades and liquidations send their collateral to the vault, which raises the nLP price.</li>
+            <li>Winning trades are paid from the vault. If it runs short, profits queue and are paid as liquidity returns.</li>
+            <li>Each position is capped at 2% of vault liquidity so no single trade can drain it.</li>
           </ol>
-          <p className="muted small">Menyediakan likuiditas berisiko: jika banyak trader untung beruntun, harga kLP turun.</p>
+          <p className="muted small">Providing liquidity is risky: a run of winning traders lowers the nLP price.</p>
         </div>
       </div>
     </div>

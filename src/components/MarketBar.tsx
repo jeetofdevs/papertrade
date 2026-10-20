@@ -42,23 +42,23 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
           <b className={`mono big ${change >= 0 ? 'up' : 'down'}`}>{price(t?.price)}</b>
         </div>
         <div>
-          <span className="label">Perubahan 24j</span>
+          <span className="label">24h change</span>
           <b className={`mono ${change >= 0 ? 'up' : 'down'}`}>{t ? pct(change) : '—'}</b>
         </div>
         <div className="hide-sm">
-          <span className="label">Tertinggi 24j</span>
+          <span className="label">24h high</span>
           <b className="mono">{price(t?.high24h)}</b>
         </div>
         <div className="hide-sm">
-          <span className="label">Terendah 24j</span>
+          <span className="label">24h low</span>
           <b className="mono">{price(t?.low24h)}</b>
         </div>
         <div className="hide-sm">
-          <span className="label">Volume 24j</span>
+          <span className="label">24h volume</span>
           <b className="mono">{t?.volume24h ? `$${compact(t.volume24h)}` : '—'}</b>
         </div>
         <div>
-          <span className="label">Leverage maks</span>
+          <span className="label">Max leverage</span>
           <b className="mono accent">1000x</b>
         </div>
       </div>

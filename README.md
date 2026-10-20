@@ -1,45 +1,45 @@
-# Kami — Perps 1000x di NEAR
+# Nitro — 1000x Perps on NEAR
 
-<img src="public/logo.svg" width="72" alt="Logo Kami" />
+<img src="public/logo.svg" width="72" alt="Nitro logo" />
 
-**Kami** (紙, "kertas" dalam bahasa Jepang) adalah DEX perpetual ala papertrade.xyz untuk ekosistem NEAR:
+**Nitro** is a papertrade.xyz-style perpetuals DEX for the NEAR ecosystem:
 
-- Long/short **NEAR, BTC, ETH, SOL** dengan leverage **1x–1000x**
-- **Tanpa biaya**: tanpa fee, slippage, maupun funding
-- **Vault USDC** jadi lawan semua trade; penyetor dapat token kLP
-- **Rugi jadi KAMI**: setiap 1 USDC kerugian mencetak 10 KAMI
-- Login dengan wallet NEAR (Meteor, MyNearWallet, HERE) di **mainnet**
-- Harga live dari feed publik Binance (otomatis pakai simulasi kalau feed tidak bisa diakses)
+- Long or short **NEAR, BTC, ETH and SOL** with **1x–1000x** leverage
+- **Zero fees**: no trading fees, no slippage, no funding
+- A shared **USDC vault** is the counterparty to every trade; depositors receive nLP
+- **Loss mining**: every 1 USDC lost mints 10 **$NITRO**
+- Sign in with a NEAR wallet (Meteor, MyNearWallet, HERE) on **mainnet**
+- Live prices from Binance's public feed, with an automatic simulated feed if it can't be reached
 
-> **Status:** login wallet sudah di NEAR mainnet, tetapi saldo trading masih **saldo demo** yang
-> disimpan di browser. Trading dengan uang asli butuh smart contract yang di-deploy ke mainnet dan diaudit.
+> **Status:** wallet sign-in runs on NEAR mainnet, but trading balances are still **demo funds**
+> stored in the browser. Real-money trading needs a smart contract deployed to mainnet and audited.
 
-## Jalankan lokal
+## Run locally
 
 ```bash
 npm install
-npm run dev        # mode pengembangan
-npm test           # tes mesin trading
-npm run build && npm start   # build produksi, buka http://localhost:3000
+npm run dev                  # dev server
+npm test                     # trading engine tests
+npm run build && npm start   # production build, open http://localhost:3000
 ```
 
-## Deploy ke Railway
+## Deploy to Railway
 
-1. Di Railway: **New Project → Deploy from GitHub repo** → pilih repo ini dan branch-nya.
-2. Railway otomatis menjalankan `npm install`, `npm run build`, lalu `npm start`.
-3. Buka **Settings → Networking → Generate Domain** untuk dapat URL publik.
+1. In Railway: **New Project → Deploy from GitHub repo**, then pick this repo and branch.
+2. Railway runs `npm install`, `npm run build`, then `npm start` automatically.
+3. Open **Settings → Networking → Generate Domain** to get a public URL.
 
-Variabel opsional (Settings → Variables), dibaca saat build:
+Optional variables (Settings → Variables), read at build time:
 
-| Variabel | Default | Keterangan |
+| Variable | Default | Notes |
 | --- | --- | --- |
-| `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` atau `testnet` |
-| `VITE_CONTRACT_ID` | `kami-perps.near` | akun kontrak untuk login wallet |
+| `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` or `testnet` |
+| `VITE_CONTRACT_ID` | `nitro-perps.near` | contract account used for wallet sign-in |
 
-## Struktur
+## Project layout
 
-- `src/lib/engine.ts`: aturan trading (posisi, PnL, likuidasi, vault, KAMI), sudah diuji
-- `src/lib/prices.ts`: feed harga live/simulasi
-- `src/lib/wallet.tsx`: koneksi wallet NEAR
-- `src/pages/`: Trade, Vault, Peringkat, $KAMI
-- `server.js`: server statis untuk Railway (tanpa dependensi)
+- `src/lib/engine.ts`: trading rules (positions, PnL, liquidation, vault, NITRO), unit tested
+- `src/lib/prices.ts`: live/simulated price feed
+- `src/lib/wallet.tsx`: NEAR wallet connection
+- `src/pages/`: Trade, Vault, Leaderboard, $NITRO
+- `server.js`: dependency-free static server for Railway

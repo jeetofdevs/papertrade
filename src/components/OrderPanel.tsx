@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   account,
   faucet,
-  KAMI_PER_USD_LOST,
+  NITRO_PER_USD_LOST,
   liquidationPrice,
   Market,
   MAX_LEVERAGE,
@@ -42,13 +42,13 @@ export function OrderPanel({ market }: { market: Market }) {
   const submit = () => {
     const err = dispatch((s) => openPosition(s, traderId, { market, side, collateral, leverage: lev }, mark, Date.now()));
     if (err) toast.err(err);
-    else toast.ok(`Posisi ${side === 'long' ? 'Long' : 'Short'} ${market} ${lev}x dibuka · ${usd(size, 0)} USDC`);
+    else toast.ok(`Opened ${side} ${market} ${lev}x · ${usd(size, 0)} USDC`);
   };
 
   const claimFaucet = () => {
     const err = dispatch((s) => faucet(s, traderId, Date.now()));
     if (err) toast.err(err);
-    else toast.ok('10.000 USDC demo ditambahkan');
+    else toast.ok('10,000 demo USDC added');
   };
 
   return (
@@ -64,9 +64,9 @@ export function OrderPanel({ market }: { market: Market }) {
 
       <div className="field">
         <div className="field-head">
-          <label htmlFor="collateral">Kolateral</label>
+          <label htmlFor="collateral">Collateral</label>
           <span className="muted">
-            Saldo demo <b className="mono">{usd(acct.usdc)}</b> USDC
+            Demo balance <b className="mono">{usd(acct.usdc)}</b> USDC
           </span>
         </div>
         <div className="input">
@@ -113,34 +113,34 @@ export function OrderPanel({ market }: { market: Market }) {
 
       <dl className="summary">
         <div>
-          <dt>Ukuran posisi</dt>
+          <dt>Position size</dt>
           <dd className="mono">{usd(size, 2)} USDC</dd>
         </div>
         <div>
-          <dt>Harga masuk</dt>
+          <dt>Entry price</dt>
           <dd className="mono">{price(mark)}</dd>
         </div>
         <div>
-          <dt>Harga likuidasi</dt>
+          <dt>Liquidation price</dt>
           <dd className="mono warn">{price(liq)}</dd>
         </div>
         <div>
-          <dt>Terlikuidasi setelah</dt>
-          <dd className="mono">gerak {moveToLiq}%</dd>
+          <dt>Liquidated after</dt>
+          <dd className="mono">{moveToLiq}% move</dd>
         </div>
         <div>
-          <dt>Biaya · slippage · funding</dt>
+          <dt>Fees · slippage · funding</dt>
           <dd className="mono accent">0 · 0 · 0</dd>
         </div>
         <div>
-          <dt>KAMI jika rugi total</dt>
-          <dd className="mono">{compact(collateral * 0.9 * KAMI_PER_USD_LOST)}</dd>
+          <dt>NITRO if fully lost</dt>
+          <dd className="mono">{compact(collateral * 0.9 * NITRO_PER_USD_LOST)}</dd>
         </div>
       </dl>
 
       {acct.usdc < 1 && acct.positions.length === 0 ? (
         <button className="btn btn-primary btn-block" onClick={claimFaucet}>
-          Ambil 10.000 USDC demo
+          Get 10,000 demo USDC
         </button>
       ) : (
         <button
@@ -151,14 +151,14 @@ export function OrderPanel({ market }: { market: Market }) {
           {side === 'long' ? 'Long' : 'Short'} {market} {lev}x
         </button>
       )}
-      {size > maxSize && <p className="hint err">Ukuran maksimal per posisi {usd(maxSize, 0)} USDC (2% dari vault).</p>}
+      {size > maxSize && <p className="hint err">Max size per position is {usd(maxSize, 0)} USDC (2% of the vault).</p>}
       {!accountId && (
         <p className="hint">
-          Trading sebagai tamu.{' '}
+          Trading as guest.{' '}
           <button className="link" onClick={connect}>
-            Hubungkan wallet NEAR
+            Connect a NEAR wallet
           </button>{' '}
-          untuk akun Anda sendiri.
+          to keep your own account.
         </p>
       )}
     </div>

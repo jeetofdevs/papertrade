@@ -117,7 +117,7 @@ export function Chart({ market, positions }: { market: Market; positions: Positi
         ))}
         <span className={`feed feed-${source}`}>
           <span className="feed-dot" />
-          {source === 'live' ? 'Harga live' : source === 'simulated' ? 'Harga simulasi' : 'Menghubungkan…'}
+          {source === 'live' ? 'Live prices' : source === 'simulated' ? 'Simulated prices' : 'Connecting…'}
         </span>
       </div>
       <div ref={el} className="chart" />

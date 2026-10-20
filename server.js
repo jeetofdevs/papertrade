@@ -31,4 +31,4 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(500).end('Server error');
   }
-}).listen(port, () => console.log(`Kami running on port ${port}`));
+}).listen(port, () => console.log(`Nitro running on port ${port}`));

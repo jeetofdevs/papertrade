@@ -6,7 +6,7 @@ import type { WalletSelectorModal } from '@near-wallet-selector/modal-ui';
 import '@near-wallet-selector/modal-ui/styles.css';
 
 export const NETWORK = (import.meta.env.VITE_NEAR_NETWORK as 'testnet' | 'mainnet' | undefined) || 'mainnet';
-export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || 'kami-perps.near';
+export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || 'nitro-perps.near';
 export const GUEST = 'guest';
 
 interface WalletCtx {

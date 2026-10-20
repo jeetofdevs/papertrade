@@ -5,7 +5,7 @@ import {
   closePosition,
   faucet,
   initialState,
-  KAMI_PER_USD_LOST,
+  NITRO_PER_USD_LOST,
   liquidationPrice,
   openPosition,
   poolDeposit,
@@ -41,9 +41,9 @@ describe('engine', () => {
 
   it('rejects bad orders', () => {
     const s = funded();
-    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 20_000, leverage: 2 }, 1, 1).error).toMatch(/tidak cukup/);
+    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 20_000, leverage: 2 }, 1, 1).error).toMatch(/Insufficient/);
     expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 10, leverage: 1001 }, 1, 1).error).toMatch(/Leverage/);
-    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 1000, leverage: 1000 }, 1, 1).error).toMatch(/maksimal/);
+    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 1000, leverage: 1000 }, 1, 1).error).toMatch(/Max position/);
   });
 
   it('pays profit from the pool', () => {
@@ -53,16 +53,16 @@ describe('engine', () => {
     s = closePosition(s, ME, pos.id, 90, 2).state; // -10% move, short wins 10% * 1000 = 100
     expect(account(s, ME).usdc).toBeCloseTo(10_100);
     expect(s.pool.liquidity).toBeCloseTo(poolBefore - 100);
-    expect(account(s, ME).kami).toBe(0);
+    expect(account(s, ME).nitro).toBe(0);
   });
 
-  it('turns losses into KAMI and pool liquidity', () => {
+  it('turns losses into NITRO and pool liquidity', () => {
     let s = openPosition(funded(), ME, { market: 'ETH', side: 'long', collateral: 100, leverage: 10 }, 100, 1).state;
     const pos = account(s, ME).positions[0];
     const poolBefore = s.pool.liquidity;
     s = closePosition(s, ME, pos.id, 95, 2).state; // -5% * 1000 = -50
     expect(account(s, ME).usdc).toBeCloseTo(9_950);
-    expect(account(s, ME).kami).toBeCloseTo(50 * KAMI_PER_USD_LOST);
+    expect(account(s, ME).nitro).toBeCloseTo(50 * NITRO_PER_USD_LOST);
     expect(s.pool.liquidity).toBeCloseTo(poolBefore + 50);
   });
 
@@ -75,7 +75,7 @@ describe('engine', () => {
     expect(a.positions).toHaveLength(0);
     expect(a.history[0].reason).toBe('liquidated');
     expect(a.usdc).toBeCloseTo(9_900);
-    expect(a.kami).toBeCloseTo(100 * KAMI_PER_USD_LOST);
+    expect(a.nitro).toBeCloseTo(100 * NITRO_PER_USD_LOST);
   });
 
   it('queues profit the pool cannot pay and lets the trader claim it later', () => {

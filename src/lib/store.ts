@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { initialState, Result, runLiquidations, State } from './engine';
 import { getMarks, onTick } from './prices';
 
-const KEY = 'kami:state:v1';
+const KEY = 'nitro:state:v1';
 
 function load(): State {
   try {
@@ -70,7 +70,7 @@ onTick(() => {
       const prev = before.accounts[id];
       const fresh = acct.history.filter((t) => t.reason === 'liquidated' && !prev?.history.some((h) => h.id === t.id));
       fresh.forEach((t) =>
-        liqListeners.forEach((l) => l(`${t.market} ${t.side} ${t.leverage}x liquidated — earned ${Math.round(t.kami).toLocaleString()} KAMI`)),
+        liqListeners.forEach((l) => l(`${t.market} ${t.side} ${t.leverage}x liquidated — earned ${Math.round(t.nitro).toLocaleString()} NITRO`)),
       );
     }
     set(next);

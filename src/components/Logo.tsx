@@ -16,7 +16,7 @@ export function Logo() {
     <span className="logo">
       <LogoMark />
       <span className="logo-word">
-        kami<span className="logo-dot">.</span>
+        nitro<span className="logo-dot">.</span>
       </span>
     </span>
   );

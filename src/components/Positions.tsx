@@ -20,7 +20,7 @@ export function Positions() {
     const t = account(getState(), traderId).history[0];
     if (!t || before.history[0]?.id === t.id) return;
     toast[t.pnl >= 0 ? 'ok' : 'info'](
-      t.pnl >= 0 ? `Posisi ditutup ${signed(t.pnl)} USDC` : `Posisi ditutup ${signed(t.pnl)} USDC · +${compact(t.kami)} KAMI`,
+      t.pnl >= 0 ? `Closed for ${signed(t.pnl)} USDC` : `Closed for ${signed(t.pnl)} USDC · +${compact(t.nitro)} NITRO`,
     );
   };
 
@@ -28,26 +28,26 @@ export function Positions() {
     <div className="panel positions">
       <div className="tabs">
         <button className={`tab ${tab === 'open' ? 'tab-on' : ''}`} onClick={() => setTab('open')}>
-          Posisi <span className="count">{acct.positions.length}</span>
+          Positions <span className="count">{acct.positions.length}</span>
         </button>
         <button className={`tab ${tab === 'history' ? 'tab-on' : ''}`} onClick={() => setTab('history')}>
-          Riwayat
+          History
         </button>
       </div>
       <div className="table-wrap">
         {tab === 'open' ? (
           acct.positions.length === 0 ? (
-            <p className="empty">Belum ada posisi terbuka. Pilih Long/Short dan leverage untuk mulai.</p>
+            <p className="empty">No open positions. Pick a side and a leverage to start.</p>
           ) : (
             <table className="table">
               <thead>
                 <tr>
                   <th>Market</th>
-                  <th>Ukuran</th>
-                  <th>Kolateral</th>
-                  <th>Masuk</th>
+                  <th>Size</th>
+                  <th>Collateral</th>
+                  <th>Entry</th>
                   <th>Mark</th>
-                  <th>Likuidasi</th>
+                  <th>Liq.</th>
                   <th>PnL (ROE)</th>
                   <th />
                 </tr>
@@ -74,7 +74,7 @@ export function Positions() {
                       </td>
                       <td>
                         <button className="btn btn-sm" onClick={() => close(p.id, mark)}>
-                          Tutup
+                          Close
                         </button>
                       </td>
                     </tr>
@@ -84,18 +84,18 @@ export function Positions() {
             </table>
           )
         ) : acct.history.length === 0 ? (
-          <p className="empty">Trade yang sudah ditutup akan muncul di sini.</p>
+          <p className="empty">Closed trades show up here.</p>
         ) : (
           <table className="table">
             <thead>
               <tr>
                 <th>Market</th>
-                <th>Ukuran</th>
-                <th>Masuk</th>
-                <th>Keluar</th>
+                <th>Size</th>
+                <th>Entry</th>
+                <th>Exit</th>
                 <th>PnL</th>
-                <th>KAMI didapat</th>
-                <th>Ditutup</th>
+                <th>NITRO earned</th>
+                <th>Closed</th>
               </tr>
             </thead>
             <tbody>
@@ -106,14 +106,14 @@ export function Positions() {
                       {t.side} {t.leverage}x
                     </span>{' '}
                     <b>{t.market}</b>
-                    {t.reason === 'liquidated' && <span className="tag tag-liq">terlikuidasi</span>}
+                    {t.reason === 'liquidated' && <span className="tag tag-liq">liquidated</span>}
                   </td>
                   <td className="mono">{usd(t.size)}</td>
                   <td className="mono">{price(t.entry)}</td>
                   <td className="mono">{price(t.exit)}</td>
                   <td className={`mono ${t.pnl >= 0 ? 'up' : 'down'}`}>{signed(t.pnl)}</td>
-                  <td className="mono accent">{t.kami ? `+${compact(t.kami)}` : '—'}</td>
-                  <td className="muted">{new Date(t.closedAt).toLocaleTimeString('id-ID')}</td>
+                  <td className="mono accent">{t.nitro ? `+${compact(t.nitro)}` : '—'}</td>
+                  <td className="muted">{new Date(t.closedAt).toLocaleTimeString('en-US')}</td>
                 </tr>
               ))}
             </tbody>
