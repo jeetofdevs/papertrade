@@ -49,7 +49,7 @@ const FAQ = [
   ],
   [
     'Is this real money?',
-    `New accounts start in demo mode with ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC. Real USDC trading on NEAR switches on once the Nitro contract is live.`,
+    `Demo mode gives every account ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC with up to 1000x. Live mode trades real USDC on Hyperliquid's order book through an EVM wallet, with each market's own leverage limit.`,
   ],
 ];
 
