@@ -131,7 +131,9 @@ export function App() {
             ? 'Nitro · live orders route to Hyperliquid · trading is risky · not financial advice'
             : 'Nitro · 1000x perps on NEAR · trading balances are demo funds · not financial advice'}
         </span>
-        <span className="muted">Prices: Binance public feed, simulated when offline</span>
+        <span className="muted">
+          Prices: Binance public feed, simulated when offline · build {__BUILD_COMMIT__} · {__BUILD_TIME__}
+        </span>
       </footer>
       <Toasts />
       <ConfirmHost />
