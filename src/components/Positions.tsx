@@ -1,3 +1,4 @@
+import { sound } from '../lib/sound';
 import { ShareCard, ShareData } from './ShareCard';
 import { TokenIcon } from './TokenIcon';
 import { useState } from 'react';
@@ -22,9 +23,25 @@ export function Positions() {
     if (err) return toast.err(err);
     const t = account(getState(), traderId).history[0];
     if (!t || before.history[0]?.id === t.id) return;
+    if (t.pnl >= 0) sound.win();
+    else sound.loss();
     toast[t.pnl >= 0 ? 'ok' : 'info'](
       t.pnl >= 0 ? `Closed for ${signed(t.pnl)} USDC` : `Closed for ${signed(t.pnl)} USDC · +${compact(t.nitro)} NITRO`,
     );
+  };
+
+  const openPnl = acct.positions.reduce((sum, p) => sum + unrealizedPnl(p, tickers[p.market]?.price ?? p.entry), 0);
+
+  const closeAll = () => {
+    const now = Date.now();
+    const total = openPnl;
+    for (const p of acct.positions) {
+      const mark = tickers[p.market]?.price ?? p.entry;
+      dispatch((s) => closePosition(s, traderId, p.id, mark, now));
+    }
+    if (total >= 0) sound.win();
+    else sound.loss();
+    toast[total >= 0 ? 'ok' : 'info'](`Closed all positions for ${signed(total)} USDC`);
   };
 
   return (
@@ -36,6 +53,14 @@ export function Positions() {
         <button className={`tab ${tab === 'history' ? 'tab-on' : ''}`} onClick={() => setTab('history')}>
           History
         </button>
+        {tab === 'open' && acct.positions.length > 0 && (
+          <div className="tabs-right">
+            <span className={`mono small ${openPnl >= 0 ? 'up' : 'down'}`}>{signed(openPnl)} USDC</span>
+            <button className="btn btn-sm" onClick={closeAll}>
+              Close all
+            </button>
+          </div>
+        )}
       </div>
       <div className="table-wrap">
         {tab === 'open' ? (

@@ -1,6 +1,7 @@
 import { TokenIcon } from './TokenIcon';
 import { Market, MARKETS } from '../lib/engine';
 import { compact, pct, price } from '../lib/format';
+import { useActivity } from '../lib/activity';
 import { usePrices } from '../lib/prices';
 
 export const MARKET_NAME: Record<Market, string> = {
@@ -12,6 +13,8 @@ export const MARKET_NAME: Record<Market, string> = {
 
 export function MarketBar({ market, onChange }: { market: Market; onChange: (m: Market) => void }) {
   const { tickers } = usePrices();
+  const { stats } = useActivity();
+  const st = stats[market];
   const t = tickers[market];
   const change = t ? (t.price / t.open24h - 1) * 100 : 0;
   return (
@@ -58,8 +61,16 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
           <b className="mono">{price(t?.low24h)}</b>
         </div>
         <div className="hide-sm">
-          <span className="label">24h volume</span>
-          <b className="mono">{t?.volume24h ? `$${compact(t.volume24h)}` : '—'}</b>
+          <span className="label">Vol 24h</span>
+          <b className="mono">${compact(st.volume24h)}</b>
+        </div>
+        <div>
+          <span className="label">Long OI</span>
+          <b className="mono up">${compact(st.longOi)}</b>
+        </div>
+        <div>
+          <span className="label">Short OI</span>
+          <b className="mono down">${compact(st.shortOi)}</b>
         </div>
         <div>
           <span className="label">Max leverage</span>

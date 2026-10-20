@@ -6,7 +6,9 @@ import type { WalletSelectorModal } from '@near-wallet-selector/modal-ui';
 import '@near-wallet-selector/modal-ui/styles.css';
 
 export const NETWORK = (import.meta.env.VITE_NEAR_NETWORK as 'testnet' | 'mainnet' | undefined) || 'mainnet';
-export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || 'nitro-perps.near';
+/** The deployed Nitro contract. Real-money mode stays off until this is set. */
+export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || '';
+export const REAL_MODE_AVAILABLE = CONTRACT_ID !== '';
 export const GUEST = 'guest';
 
 interface WalletCtx {
@@ -55,7 +57,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     loadSelector()
       .then(({ s, setupModal }) => {
         setSelector(s);
-        setModal(setupModal(s, { contractId: CONTRACT_ID }));
+        setModal(setupModal(s, CONTRACT_ID ? { contractId: CONTRACT_ID } : {}));
         const pick = () => s.store.getState().accounts.find((a) => a.active)?.accountId ?? null;
         setAccountId(pick());
         const sub = s.store.observable.subscribe(() => setAccountId(pick()));

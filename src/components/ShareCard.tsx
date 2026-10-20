@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Market, Side } from '../lib/engine';
 import { price, shortAccount, signed } from '../lib/format';
 import { LogoMark } from './Logo';
@@ -173,7 +174,7 @@ export function ShareCard({ data, onClose }: { data: ShareData; onClose: () => v
   const canNativeShare = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
   const nativeShare = () => file && navigator.share({ files: [file], text }).catch(() => {});
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal panel" role="dialog" aria-modal="true" aria-label="Share PnL" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
@@ -204,6 +205,7 @@ export function ShareCard({ data, onClose }: { data: ShareData; onClose: () => v
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

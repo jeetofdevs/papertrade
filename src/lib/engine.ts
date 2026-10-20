@@ -17,7 +17,8 @@ export const LIQUIDATION_LOSS = 1;
 export const NITRO_PER_USD_LOST = 10;
 /** One position can be at most this share of pool liquidity. */
 export const MAX_SIZE_OF_POOL = 0.02;
-export const FAUCET_AMOUNT = 10_000;
+/** Demo USDC every new account starts with, and gets again after 24 hours. */
+export const FAUCET_AMOUNT = 1_000;
 export const FAUCET_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 export interface Position {

@@ -196,3 +196,33 @@ export async function loadCandles(m: Market, intervalSec: number): Promise<Candl
   }
   return out;
 }
+
+export interface Point {
+  time: number; // seconds
+  value: number;
+}
+
+/** Recent per-second prices for the tick chart. */
+export async function loadTicks(m: Market): Promise<Point[]> {
+  const bySecond = new Map<number, number>();
+  if (snap.source === 'live') {
+    try {
+      const res = await fetch(`${API}/aggTrades?symbol=${SYMBOL[m]}&limit=1000`);
+      const rows: Array<{ p: string; T: number }> = await res.json();
+      for (const r of rows) bySecond.set(Math.floor(r.T / 1000), +r.p);
+    } catch {
+      /* fall back to what we have */
+    }
+  }
+  for (const t of ticks[m]) bySecond.set(Math.floor(t.time / 1000), t.price);
+  if (bySecond.size < 30) {
+    // Not enough history yet: backfill a short random walk that joins the oldest known price.
+    const first = bySecond.size ? Math.min(...bySecond.keys()) : Math.floor(Date.now() / 1000);
+    let p = bySecond.get(first) ?? snap.tickers[m]?.price ?? FALLBACK[m];
+    for (let i = 1; i <= 240; i++) {
+      if (Math.random() < 0.35) p *= 1 + (Math.random() - 0.5) * 0.0015;
+      bySecond.set(first - i, p);
+    }
+  }
+  return [...bySecond.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
+}

@@ -3,6 +3,7 @@ import { Chart } from '../components/Chart';
 import { MarketBar } from '../components/MarketBar';
 import { OrderPanel } from '../components/OrderPanel';
 import { Positions } from '../components/Positions';
+import { TradeTicker } from '../components/TradeTicker';
 import { account, Market } from '../lib/engine';
 import { useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
@@ -16,7 +17,7 @@ export function Trade() {
     }
   });
   const { traderId } = useWallet();
-  const positions = account(useStore(), traderId).positions;
+  const acct = account(useStore(), traderId);
   const pick = (m: Market) => {
     setMarket(m);
     try {
@@ -29,9 +30,10 @@ export function Trade() {
     <div className="trade">
       <MarketBar market={market} onChange={pick} />
       <div className="trade-main">
-        <Chart market={market} positions={positions} />
+        <Chart market={market} positions={acct.positions} history={acct.history} />
         <OrderPanel market={market} />
       </div>
+      <TradeTicker />
       <Positions />
     </div>
   );

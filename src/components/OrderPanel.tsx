@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   account,
   faucet,
+  FAUCET_AMOUNT,
   NITRO_PER_USD_LOST,
   liquidationPrice,
   Market,
@@ -16,6 +17,8 @@ import { compact, price, usd } from '../lib/format';
 import { usePrices } from '../lib/prices';
 import { dispatch, useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
+import { getSettings } from '../lib/settings';
+import { sound } from '../lib/sound';
 import { toast } from './Toasts';
 
 const PRESETS = [2, 10, 50, 100, 500, 1000];
@@ -42,15 +45,25 @@ export function OrderPanel({ market }: { market: Market }) {
   const moveToLiq = (100 / lev).toFixed(lev >= 100 ? 3 : 2);
 
   const submit = () => {
+    if (getSettings().childproof && (lev > 100 || collateral > acct.usdc / 2)) {
+      const ok = window.confirm(
+        `Childproof check: ${side} ${market} at ${lev}x with ${usd(collateral)} USDC. ` +
+          `A ${moveToLiq}% move against you loses the whole wager. Continue?`,
+      );
+      if (!ok) return;
+    }
     const err = dispatch((s) => openPosition(s, traderId, { market, side, collateral, leverage: lev }, mark, Date.now()));
     if (err) toast.err(err);
-    else toast.ok(`Opened ${side} ${market} ${lev}x · ${usd(size, 0)} USDC`);
+    else {
+      sound.open();
+      toast.ok(`Opened ${side} ${market} ${lev}x · ${usd(size, 0)} USDC`);
+    }
   };
 
   const claimFaucet = () => {
     const err = dispatch((s) => faucet(s, traderId, Date.now()));
     if (err) toast.err(err);
-    else toast.ok('10,000 demo USDC added');
+    else toast.ok(`${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added`);
   };
 
   return (
@@ -149,7 +162,7 @@ export function OrderPanel({ market }: { market: Market }) {
 
       {acct.usdc < 1 && acct.positions.length === 0 ? (
         <button className="btn btn-primary btn-block" onClick={claimFaucet}>
-          Get 10,000 demo USDC
+          Get {FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC
         </button>
       ) : (
         <button

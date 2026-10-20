@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Logo } from './components/Logo';
+import { ModeToggle } from './components/ModeToggle';
+import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
-import { account, faucet } from './lib/engine';
+import { startActivity } from './lib/activity';
+import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { shortAccount, usd } from './lib/format';
 import { startPrices } from './lib/prices';
-import { dispatch, onLiquidation, useStore } from './lib/store';
+import { sound } from './lib/sound';
+import { dispatch, getState, onLiquidation, useStore } from './lib/store';
 import { NETWORK, useWallet } from './lib/wallet';
 import { Earn } from './pages/Earn';
 import { Nitro } from './pages/Nitro';
@@ -31,19 +35,31 @@ export function App() {
 
   useEffect(() => {
     startPrices();
+    startActivity();
     const onHash = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHash);
-    const off = onLiquidation((m) => toast.err(m));
+    const off = onLiquidation((m) => {
+      toast.err(m);
+      sound.bust();
+    });
     return () => {
       window.removeEventListener('hashchange', onHash);
       off();
     };
   }, []);
 
+  // Every account, guest or wallet, starts with demo USDC.
+  useEffect(() => {
+    if (!getState().accounts[traderId]) {
+      dispatch((s) => faucet(s, traderId, Date.now()));
+      toast.ok(`Welcome! ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added to your account`);
+    }
+  }, [traderId]);
+
   const getUsdc = () => {
     const err = dispatch((s) => faucet(s, traderId, Date.now()));
     if (err) toast.err(err);
-    else toast.ok('10,000 demo USDC added');
+    else toast.ok(`${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added`);
   };
 
   return (
@@ -60,6 +76,7 @@ export function App() {
           ))}
         </nav>
         <div className="top-right">
+          <ModeToggle />
           <span className="net mono">
             <span className="near-dot" />
             NEAR {NETWORK}
@@ -67,6 +84,7 @@ export function App() {
           <button className="balance mono" onClick={getUsdc} title="Get demo USDC">
             {usd(acct.usdc)} <span className="muted">USDC demo</span>
           </button>
+          <SettingsMenu />
           {accountId ? (
             <button className="btn btn-ghost" onClick={() => disconnect()} title="Disconnect">
               {shortAccount(accountId)}

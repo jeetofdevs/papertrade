@@ -21,7 +21,7 @@ const funded = (): State => faucet(initialState(), ME, Date.now()).state;
 describe('engine', () => {
   it('faucet gives USDC once per day', () => {
     const s = funded();
-    expect(account(s, ME).usdc).toBe(10_000);
+    expect(account(s, ME).usdc).toBe(1_000);
     expect(faucet(s, ME, Date.now()).error).toBeTruthy();
   });
 
@@ -35,15 +35,15 @@ describe('engine', () => {
     const r = openPosition(funded(), ME, { market: 'NEAR', side: 'long', collateral: 100, leverage: 50 }, 5, 1);
     expect(r.error).toBeUndefined();
     const a = account(r.state, ME);
-    expect(a.usdc).toBe(9_900);
+    expect(a.usdc).toBe(900);
     expect(a.positions[0].size).toBe(5_000);
   });
 
   it('rejects bad orders', () => {
     const s = funded();
-    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 20_000, leverage: 2 }, 1, 1).error).toMatch(/Insufficient/);
+    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 2_000, leverage: 2 }, 1, 1).error).toMatch(/Insufficient/);
     expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 10, leverage: 1001 }, 1, 1).error).toMatch(/Leverage/);
-    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 1000, leverage: 1000 }, 1, 1).error).toMatch(/Max position/);
+    expect(openPosition(s, ME, { market: 'BTC', side: 'long', collateral: 100, leverage: 1000 }, 1, 1).error).toMatch(/Max position/);
   });
 
   it('pays profit from the pool', () => {
@@ -51,7 +51,7 @@ describe('engine', () => {
     const pos = account(s, ME).positions[0];
     const poolBefore = s.pool.liquidity;
     s = closePosition(s, ME, pos.id, 90, 2).state; // -10% move, short wins 10% * 1000 = 100
-    expect(account(s, ME).usdc).toBeCloseTo(10_100);
+    expect(account(s, ME).usdc).toBeCloseTo(1_100);
     expect(s.pool.liquidity).toBeCloseTo(poolBefore - 100);
     expect(account(s, ME).nitro).toBe(0);
   });
@@ -61,7 +61,7 @@ describe('engine', () => {
     const pos = account(s, ME).positions[0];
     const poolBefore = s.pool.liquidity;
     s = closePosition(s, ME, pos.id, 95, 2).state; // -5% * 1000 = -50
-    expect(account(s, ME).usdc).toBeCloseTo(9_950);
+    expect(account(s, ME).usdc).toBeCloseTo(950);
     expect(account(s, ME).nitro).toBeCloseTo(50 * NITRO_PER_USD_LOST);
     expect(s.pool.liquidity).toBeCloseTo(poolBefore + 50);
   });
@@ -74,7 +74,7 @@ describe('engine', () => {
     const a = account(s, ME);
     expect(a.positions).toHaveLength(0);
     expect(a.history[0].reason).toBe('liquidated');
-    expect(a.usdc).toBeCloseTo(9_900);
+    expect(a.usdc).toBeCloseTo(900);
     expect(a.nitro).toBeCloseTo(100 * NITRO_PER_USD_LOST);
   });
 
@@ -99,6 +99,6 @@ describe('engine', () => {
     expect(shares).toBeCloseTo(1_000 / sharePrice(initialState().pool));
     s = { ...s, pool: { ...s.pool, liquidity: s.pool.liquidity * 1.1 } }; // pool earned 10%
     s = poolWithdraw(s, ME, shares).state;
-    expect(account(s, ME).usdc).toBeCloseTo(9_000 + 1_100);
+    expect(account(s, ME).usdc).toBeCloseTo(1_100);
   });
 });
