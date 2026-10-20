@@ -34,3 +34,66 @@ export function useLiveSummary(): LiveSummary {
     () => summary,
   );
 }
+
+// ---- Real trade activity for quests ----
+
+export interface LiveFill {
+  at: number;
+  market: string;
+  usd: number;
+  /** Realized PnL when the fill closed (part of) a position, else 0. */
+  pnl: number;
+}
+
+export interface LiveOpen {
+  at: number;
+  market: string;
+  usd: number;
+  leverage: number;
+}
+
+export interface LiveActivity {
+  /** True once trades have been loaded from Orderly for a trading-enabled account. */
+  ready: boolean;
+  address: string | null;
+  fills: LiveFill[];
+}
+
+let activity: LiveActivity = { ready: false, address: null, fills: [] };
+const activityListeners = new Set<() => void>();
+
+export function setLiveActivity(next: LiveActivity) {
+  activity = next;
+  activityListeners.forEach((l) => l());
+}
+
+export function useLiveActivity(): LiveActivity {
+  return useSyncExternalStore(
+    (l) => {
+      activityListeners.add(l);
+      return () => activityListeners.delete(l);
+    },
+    () => activity,
+  );
+}
+
+// Leverage is not part of Orderly's fill history, so Nitro remembers the leverage of orders it sent.
+const opensKey = (address: string) => `nitro:live-opens:${address.toLowerCase()}`;
+
+export function recordLiveOpen(address: string, o: LiveOpen) {
+  try {
+    const list: LiveOpen[] = JSON.parse(localStorage.getItem(opensKey(address)) || '[]');
+    localStorage.setItem(opensKey(address), JSON.stringify([o, ...list].slice(0, 200)));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function liveOpens(address: string | null): LiveOpen[] {
+  if (!address) return [];
+  try {
+    return JSON.parse(localStorage.getItem(opensKey(address)) || '[]');
+  } catch {
+    return [];
+  }
+}

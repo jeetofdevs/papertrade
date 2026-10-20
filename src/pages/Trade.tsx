@@ -11,7 +11,7 @@ import { useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
 
-const OrderlyLive = lazy(() => import('../live/OrderlyLive'));
+const LiveTrade = lazy(() => import('../live/OrderlyLive').then((m) => ({ default: m.LiveTrade })));
 
 export function Trade() {
   const [market, setMarket] = useState<Market>(() => {
@@ -41,7 +41,7 @@ export function Trade() {
       {live ? (
         LIVE_AVAILABLE ? (
           <Suspense fallback={<div className="panel empty">Loading Orderly…</div>}>
-            <OrderlyLive market={market} />
+            <LiveTrade market={market} />
           </Suspense>
         ) : (
           <div className="panel pad live-off">

@@ -3565,3 +3565,23 @@ html.uwuless .top {
     flex-wrap: wrap;
   }
 }
+.quest-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: rgba(255, 181, 71, 0.4);
+  background: linear-gradient(135deg, rgba(255, 181, 71, 0.08), transparent), var(--panel);
+}
+.quest-notice p {
+  margin: 4px 0 0;
+}
+.quests-locked .quest {
+  opacity: 0.6;
+}
+@media (max-width: 600px) {
+  .quest-notice {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

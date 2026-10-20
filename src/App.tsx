@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { CelebrationHost, resultFromTrade, showTradeResult } from './components/Celebration';
 import { ConfirmHost } from './components/Confirm';
 import { UwuDecor } from './components/UwuDecor';
@@ -9,7 +9,7 @@ import { ProfileMenu } from './components/ProfileMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
 import { startActivity } from './lib/activity';
-import { useLiveSummary } from './lib/live';
+import { LIVE_AVAILABLE, useLiveSummary } from './lib/live';
 import { useSettings } from './lib/settings';
 import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { usd } from './lib/format';
@@ -23,6 +23,8 @@ import { Nitro } from './pages/Nitro';
 import { Profile } from './pages/Profile';
 import { Leaderboard } from './pages/Leaderboard';
 import { Trade } from './pages/Trade';
+
+const OrderlyRoot = lazy(() => import('./live/OrderlyLive').then((m) => ({ default: m.OrderlyRoot })));
 
 const ROUTES = {
   trade: { label: 'Trade', el: <Trade /> },
@@ -125,7 +127,17 @@ export function App() {
           )}
         </div>
       </header>
-      <main>{inApp ? ROUTES[route].el : <Landing />}</main>
+      <main>
+        {!inApp ? (
+          <Landing />
+        ) : mode === 'live' && LIVE_AVAILABLE ? (
+          <Suspense fallback={<div className="panel empty">Loading Orderly…</div>}>
+            <OrderlyRoot>{ROUTES[route].el}</OrderlyRoot>
+          </Suspense>
+        ) : (
+          ROUTES[route].el
+        )}
+      </main>
       <Footer />
       <Toasts />
       <ConfirmHost />

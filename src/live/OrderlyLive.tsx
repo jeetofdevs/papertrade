@@ -13,6 +13,7 @@ import {
   useMutation,
   useOrderEntry,
   usePositionStream,
+  usePrivateQuery,
   useSymbolLeverage,
   WalletConnectorContext,
   type WalletState,
@@ -27,7 +28,7 @@ import { toast } from '../components/Toasts';
 import { TokenIcon } from '../components/TokenIcon';
 import { Market, MARKETS, Position } from '../lib/engine';
 import { compact, price, signed, usd } from '../lib/format';
-import { ORDERLY_BROKER_ID, ORDERLY_NETWORK, setLiveSummary } from '../lib/live';
+import { ORDERLY_BROKER_ID, ORDERLY_NETWORK, recordLiveOpen, setLiveActivity, setLiveSummary } from '../lib/live';
 import { getSettings } from '../lib/settings';
 import { sound } from '../lib/sound';
 
@@ -138,18 +139,58 @@ const useWalletCtx = () => useContext(WalletConnectorContext);
 
 // ---------- Root ----------
 
-export default function OrderlyLive({ market }: { market: Market }) {
+/** Wraps the app in Live mode: Orderly config, the EVM wallet, and the real-trade feed for quests. */
+export function OrderlyRoot({ children }: { children: ReactNode }) {
   return (
     <OrderlyConfigProvider brokerId={ORDERLY_BROKER_ID} brokerName="Nitro" networkId={ORDERLY_NETWORK}>
       <EvmConnector>
         <AccountSync />
-        <LiveTrade market={market} />
+        <QuestFeed />
+        {children}
       </EvmConnector>
     </OrderlyConfigProvider>
   );
 }
 
-function LiveTrade({ market }: { market: Market }) {
+const DAY = 24 * 60 * 60 * 1000;
+
+interface OrderlyTradeRow {
+  symbol: string;
+  executed_price: number;
+  executed_quantity: number;
+  executed_timestamp: number;
+  realized_pnl?: number;
+}
+
+/** Loads the last 30 days of real fills from Orderly and publishes them for quests. */
+function QuestFeed() {
+  const { state } = useAccount();
+  const wallet = useWalletCtx();
+  const address = wallet.wallet?.accounts[0]?.address ?? null;
+  const enabled = state.status >= AccountStatusEnum.EnableTrading;
+  // Round the window to the hour so the query key stays stable between renders.
+  const end = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
+  const { data } = usePrivateQuery<OrderlyTradeRow[]>(enabled ? `/v1/trades?start_t=${end - 30 * DAY}&end_t=${end}&size=500` : null, {
+    refreshInterval: 20_000,
+  });
+  const key = JSON.stringify([enabled, address, data?.length ?? -1, data?.[0]?.executed_timestamp ?? 0]);
+  useEffect(() => {
+    setLiveActivity({
+      ready: enabled && Array.isArray(data),
+      address,
+      fills: (Array.isArray(data) ? data : []).map((t) => ({
+        at: t.executed_timestamp,
+        market: t.symbol.split('_')[1] ?? t.symbol,
+        usd: Math.abs(t.executed_price * t.executed_quantity),
+        pnl: Number(t.realized_pnl ?? 0),
+      })),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return null;
+}
+
+export function LiveTrade({ market }: { market: Market }) {
   const [{ rows }] = usePositionStream();
   const { totalCollateral } = useCollateral();
   const { state } = useAccount();
@@ -346,6 +387,8 @@ function LiveOrderPanel({ market }: { market: Market }) {
       }
       // A rejected order does not throw, it returns success: false.
       if (!result?.success) throw new Error((result as { message?: string })?.message || 'Orderly rejected the order');
+      const addr = wallet.wallet?.accounts[0]?.address;
+      if (addr) recordLiveOpen(addr, { at: Date.now(), market, usd: notional, leverage: lev });
       sound.open();
     }, `Opened ${side} ${market} ${lev}x on Orderly`);
   };
