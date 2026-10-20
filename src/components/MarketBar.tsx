@@ -2,6 +2,8 @@ import { TokenIcon } from './TokenIcon';
 import { Market, MARKETS } from '../lib/engine';
 import { compact, pct, price } from '../lib/format';
 import { useActivity } from '../lib/activity';
+import { useHl } from '../lib/hl/store';
+import { useSettings } from '../lib/settings';
 import { usePrices } from '../lib/prices';
 
 export const MARKET_NAME: Record<Market, string> = {
@@ -14,6 +16,9 @@ export const MARKET_NAME: Record<Market, string> = {
 export function MarketBar({ market, onChange }: { market: Market; onChange: (m: Market) => void }) {
   const { tickers } = usePrices();
   const { stats } = useActivity();
+  const { mode } = useSettings();
+  const hl = useHl();
+  const maxLev = mode === 'live' ? (hl.assets?.[market]?.maxLeverage ?? '—') : 1000;
   const st = stats[market];
   const t = tickers[market];
   const change = t ? (t.price / t.open24h - 1) * 100 : 0;
@@ -74,7 +79,7 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
         </div>
         <div>
           <span className="label">Max leverage</span>
-          <b className="mono accent">1000x</b>
+          <b className="mono accent">{maxLev}x</b>
         </div>
       </div>
     </div>

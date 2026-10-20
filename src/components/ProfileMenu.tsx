@@ -68,7 +68,7 @@ export function ProfileMenu() {
             <div className="pm-id">
               <b className="mono">{shortAccount(id)}</b>
               <span className="muted small">
-                NEAR {NETWORK} · {mode === 'real' ? 'Real USDC' : 'Demo'}
+                NEAR {NETWORK} · {mode === 'live' ? 'Live · Hyperliquid' : 'Demo'}
               </span>
             </div>
             <button className="icon-btn icon-btn-sm" onClick={copy} aria-label="Copy address" title="Copy address">

@@ -3,8 +3,8 @@
 import { useSyncExternalStore } from 'react';
 
 export interface Settings {
-  /** demo: local demo USDC. real: USDC on NEAR through the Nitro contract. */
-  mode: 'demo' | 'real';
+  /** demo: local demo USDC. live: real USDC on Hyperliquid. */
+  mode: 'demo' | 'live';
   chartType: 'tick' | 'candles';
   showEntries: boolean;
   showMaxLoss: boolean;
@@ -37,6 +37,7 @@ const DEFAULTS: Settings = {
 let settings: Settings = DEFAULTS;
 try {
   settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+  if (settings.mode !== 'live') settings.mode = 'demo';
 } catch {
   /* storage unavailable */
 }

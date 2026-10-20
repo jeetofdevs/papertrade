@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Chart } from '../components/Chart';
+import { LiveOrderPanel } from '../components/LiveOrderPanel';
+import { LivePositions } from '../components/LivePositions';
 import { MarketBar } from '../components/MarketBar';
 import { OrderPanel } from '../components/OrderPanel';
 import { Positions } from '../components/Positions';
 import { TradeTicker } from '../components/TradeTicker';
-import { account, Market } from '../lib/engine';
+import { account, Market, MARKETS, Position } from '../lib/engine';
+import { useHl } from '../lib/hl/store';
+import { useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
 
@@ -18,6 +22,23 @@ export function Trade() {
   });
   const { traderId } = useWallet();
   const acct = account(useStore(), traderId);
+  const { mode } = useSettings();
+  const live = mode === 'live';
+  const hl = useHl();
+  // Hyperliquid positions drawn on the chart like demo positions.
+  const livePositions: Position[] = (hl.account?.positions ?? [])
+    .filter((p) => (MARKETS as string[]).includes(p.coin))
+    .map((p) => ({
+      id: `hl-${p.coin}`,
+      market: p.coin as Market,
+      side: p.size > 0 ? 'long' : 'short',
+      collateral: p.margin,
+      leverage: p.leverage,
+      size: p.value,
+      entry: p.entry,
+      liq: p.liq ?? 0,
+      openedAt: 0,
+    }));
   const pick = (m: Market) => {
     setMarket(m);
     try {
@@ -30,11 +51,11 @@ export function Trade() {
     <div className="trade">
       <MarketBar market={market} onChange={pick} />
       <div className="trade-main">
-        <Chart market={market} positions={acct.positions} history={acct.history} />
-        <OrderPanel market={market} />
+        <Chart market={market} positions={live ? livePositions : acct.positions} history={live ? [] : acct.history} />
+        {live ? <LiveOrderPanel market={market} /> : <OrderPanel market={market} />}
       </div>
       <TradeTicker />
-      <Positions />
+      {live ? <LivePositions /> : <Positions />}
     </div>
   );
 }

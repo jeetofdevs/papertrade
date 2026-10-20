@@ -7,6 +7,8 @@ import { ProfileMenu } from './components/ProfileMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
 import { startActivity } from './lib/activity';
+import { useHl } from './lib/hl/store';
+import { useSettings } from './lib/settings';
 import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { usd } from './lib/format';
 import { startPrices } from './lib/prices';
@@ -39,6 +41,8 @@ export function App() {
   const { accountId, traderId, connect, ready } = useWallet();
   const acct = account(useStore(), traderId);
   const inApp = !!accountId || ALLOW_GUEST;
+  const { mode } = useSettings();
+  const hl = useHl();
 
   useEffect(() => {
     startPrices();
@@ -91,10 +95,15 @@ export function App() {
             <span className="near-dot" />
             NEAR {NETWORK}
           </span>
-          {inApp && (
+          {inApp && mode === 'demo' && (
             <button className="balance mono" onClick={getUsdc} title="Get demo USDC">
               {usd(acct.usdc)} <span className="muted">USDC demo</span>
             </button>
+          )}
+          {inApp && mode === 'live' && (
+            <span className="balance mono" title="Hyperliquid account value">
+              {usd(hl.account?.accountValue ?? 0)} <span className="muted">USDC live</span>
+            </span>
           )}
           {inApp && <SettingsMenu />}
           {inApp ? (
@@ -109,7 +118,9 @@ export function App() {
       <main>{inApp ? ROUTES[route].el : <Landing />}</main>
       <footer className="foot">
         <span>
-          Nitro · 1000x perps on NEAR · trading balances are demo funds · not financial advice
+          {mode === 'live'
+            ? 'Nitro · live orders route to Hyperliquid · trading is risky · not financial advice'
+            : 'Nitro · 1000x perps on NEAR · trading balances are demo funds · not financial advice'}
         </span>
         <span className="muted">Prices: Binance public feed, simulated when offline</span>
       </footer>
