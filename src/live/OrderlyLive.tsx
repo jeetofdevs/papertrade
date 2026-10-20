@@ -220,7 +220,7 @@ function LiveOrderPanel({ market }: { market: Market }) {
   const dir = side === 'long' ? 1 : -1;
   const tpPrice = tpRoe && mark ? mark * (1 + (dir * tpRoe) / 100 / lev) : null;
 
-  const { setValues, submit } = useOrderEntry(symbol, {
+  const { setValues, submit, metaState } = useOrderEntry(symbol, {
     initialOrder: { side: OrderSide.BUY, order_type: OrderType.MARKET, margin_mode: MarginMode.ISOLATED },
   });
 
@@ -337,7 +337,15 @@ function LiveOrderPanel({ market }: { market: Market }) {
         /* already isolated, or the market has a cross position open */
       }
       await updateLeverage({ leverage: lev, symbol, margin_mode: MarginMode.ISOLATED });
-      await submit({ resetOnSuccess: false });
+      let result;
+      try {
+        result = await submit({ resetOnSuccess: false });
+      } catch (e) {
+        // Validation failures throw a generic error; the details land in metaState.errors (shown below the button).
+        throw new Error((e as Error)?.message === 'Order validation failed' ? 'Order not valid. See the note below the button.' : (e as Error)?.message);
+      }
+      // A rejected order does not throw, it returns success: false.
+      if (!result?.success) throw new Error((result as { message?: string })?.message || 'Orderly rejected the order');
       sound.open();
     }, `Opened ${side} ${market} ${lev}x on Orderly`);
   };
@@ -425,6 +433,14 @@ function LiveOrderPanel({ market }: { market: Market }) {
         {busy ? 'Sending…' : `${side === 'long' ? 'Long' : 'Short'} ${market} ${lev}x`}
       </button>
       {wager > (freeCollateral ?? 0) && <p className="hint err">Not enough free USDC on Orderly. Deposit first.</p>}
+      {metaState.submitted &&
+        Object.values(metaState.errors ?? {})
+          .filter(Boolean)
+          .map((err, i) => (
+            <p key={i} className="hint err">
+              {err!.message}
+            </p>
+          ))}
       <button className="btn btn-block btn-ghost-xl" onClick={() => setDeposit(true)}>
         Deposit USDC
       </button>
