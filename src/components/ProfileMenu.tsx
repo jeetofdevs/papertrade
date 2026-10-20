@@ -111,8 +111,8 @@ export function ProfileMenu() {
             <button className="pm-link" onClick={() => go('#/trade')}>
               Positions <span className="count">{acct.positions.length}</span>
             </button>
-            <button className="pm-link" onClick={() => go('#/vault')}>
-              Vault <span className="muted small mono">${compact(st.vaultValue)}</span>
+            <button className="pm-link" onClick={() => go('#/quests')}>
+              Quests <span className="muted small">daily NITRO</span>
             </button>
             {mode === 'demo' && (
               <button className="pm-link" onClick={refill} disabled={nextFaucet > 0}>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CelebrationHost, resultFromTrade, showTradeResult } from './components/Celebration';
 import { ConfirmHost } from './components/Confirm';
 import { UwuDecor } from './components/UwuDecor';
+import { Footer } from './components/Footer';
 import { Logo } from './components/Logo';
 import { ModeToggle } from './components/ModeToggle';
 import { ProfileMenu } from './components/ProfileMenu';
@@ -16,7 +17,7 @@ import { startPrices } from './lib/prices';
 import { sound } from './lib/sound';
 import { dispatch, getState, onAutoClose, useStore } from './lib/store';
 import { ALLOW_GUEST, NETWORK, useWallet } from './lib/wallet';
-import { Earn } from './pages/Earn';
+import { Quests } from './pages/Quests';
 import { Landing } from './pages/Landing';
 import { Nitro } from './pages/Nitro';
 import { Profile } from './pages/Profile';
@@ -25,7 +26,7 @@ import { Trade } from './pages/Trade';
 
 const ROUTES = {
   trade: { label: 'Trade', el: <Trade /> },
-  vault: { label: 'Vault', el: <Earn /> },
+  quests: { label: 'Quests', el: <Quests /> },
   leaderboard: { label: 'Leaderboard', el: <Leaderboard /> },
   nitro: { label: '$NITRO', el: <Nitro /> },
   profile: { label: 'Profile', el: <Profile /> },
@@ -125,16 +126,7 @@ export function App() {
         </div>
       </header>
       <main>{inApp ? ROUTES[route].el : <Landing />}</main>
-      <footer className="foot">
-        <span>
-          {mode === 'live'
-            ? 'Nitro · live orders route to Orderly Network · trading is risky · not financial advice'
-            : 'Nitro · 1000x perps on NEAR · trading balances are demo funds · not financial advice'}
-        </span>
-        <span className="muted">
-          Prices: Binance public feed, simulated when offline · build {__BUILD_COMMIT__} · {__BUILD_TIME__}
-        </span>
-      </footer>
+      <Footer />
       <Toasts />
       <ConfirmHost />
       <CelebrationHost />

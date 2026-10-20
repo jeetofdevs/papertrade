@@ -125,7 +125,6 @@ export function Profile() {
         <Stat label="NITRO earned" value={compact(acct.nitro)} accent />
         <Stat label="Max losses hit" value={`${st.maxLosses}`} />
         <Stat label="Open PnL" value={signedUsd(st.openPnl)} accent={st.openPnl > 0} />
-        <Stat label="Vault value" value={`$${usd(st.vaultValue)}`} />
       </div>
 
       <div className="panel pad">

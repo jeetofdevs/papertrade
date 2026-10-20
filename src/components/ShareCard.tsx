@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { drawShare, H, ShareData, TemplateId, TEMPLATES, W } from '../lib/shareTemplates';
 import { getSettings } from '../lib/settings';
+import { recordShare } from '../lib/engine';
+import { dispatch } from '../lib/store';
+import { useWallet } from '../lib/wallet';
 import { LogoMark } from './Logo';
 import { toast } from './Toasts';
 import { TokenIcon } from './TokenIcon';
@@ -68,7 +71,11 @@ export function ShareCard({ data, onClose }: { data: ShareData; onClose: () => v
   const text = `${roe >= 0 ? '+' : ''}${roe.toFixed(2)}% on ${data.market} ${data.side} ${data.leverage}x with Nitro, 1000x perps on NEAR`;
   const fileName = `nitro-${data.market}-${data.side}-${data.leverage}x-${template}.png`;
 
+  const { traderId } = useWallet();
+  const shared = () => dispatch((s) => recordShare(s, traderId, Date.now()));
+
   const download = () => {
+    shared();
     if (!blob) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -79,6 +86,7 @@ export function ShareCard({ data, onClose }: { data: ShareData; onClose: () => v
 
   const copy = async () => {
     try {
+      shared();
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob! })]);
       toast.ok('Image copied');
     } catch {
@@ -87,6 +95,7 @@ export function ShareCard({ data, onClose }: { data: ShareData; onClose: () => v
   };
 
   const shareX = () => {
+    shared();
     const url = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(location.origin)}`;
     window.open(url, '_blank', 'noopener');
   };

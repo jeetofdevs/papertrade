@@ -46,6 +46,7 @@ export interface Trade {
   pnl: number;
   nitro: number;
   reason: 'close' | 'liquidated' | 'tp';
+  openedAt?: number;
   closedAt: number;
 }
 
@@ -58,6 +59,10 @@ export interface Account {
   realizedPnl: number;
   volume: number;
   lastFaucet: number;
+  /** Quest id → the period key it was claimed in. */
+  questClaims?: Record<string, string>;
+  /** PnL cards shared, for quests. */
+  shares?: number[];
   positions: Position[];
   history: Trade[];
 }
@@ -223,6 +228,7 @@ export function closePosition(
     pnl: round(pnl),
     nitro: round(nitro),
     reason,
+    openedAt: pos.openedAt,
     closedAt: now,
   };
 
@@ -319,4 +325,24 @@ export function poolWithdraw(state: State, id: string, shares: number): Result {
       },
     ),
   };
+}
+
+/** Claim a quest reward once per period (for example once per day). */
+export function claimQuest(state: State, id: string, questId: string, period: string, reward: number): Result {
+  const acct = account(state, id);
+  if (acct.questClaims?.[questId] === period) return { state, error: 'Already claimed' };
+  return {
+    state: withAccount(
+      state,
+      id,
+      { ...acct, nitro: round(acct.nitro + reward), questClaims: { ...acct.questClaims, [questId]: period } },
+      { ...state.pool, nitroMinted: round(state.pool.nitroMinted + reward) },
+    ),
+  };
+}
+
+/** Remember that the trader shared a PnL card. */
+export function recordShare(state: State, id: string, now: number): Result {
+  const acct = account(state, id);
+  return { state: withAccount(state, id, { ...acct, shares: [now, ...(acct.shares ?? [])].slice(0, 50) }) };
 }
