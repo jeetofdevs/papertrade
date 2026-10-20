@@ -336,7 +336,7 @@ const THEMES: Record<TemplateId, Theme> = {
       ctx.beginPath();
       ctx.arc(1000, 420, 220, 0, Math.PI * 2);
       ctx.fill();
-      if (a.cat) ctx.drawImage(a.cat, 860, 300, 300, 300);
+      if (a.cat) ctx.drawImage(a.cat, 900, 255, 266, 337);
     },
   },
 };

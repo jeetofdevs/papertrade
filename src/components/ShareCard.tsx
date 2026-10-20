@@ -8,7 +8,7 @@ import { useWallet } from '../lib/wallet';
 import { LogoMark } from './Logo';
 import { toast } from './Toasts';
 import { TokenIcon } from './TokenIcon';
-import { Cat } from './UwuDecor';
+import { NiaPortrait } from './NiaPortrait';
 
 export type { ShareData };
 
@@ -131,7 +131,7 @@ export function ShareCard({ data, onClose }: { data: ShareData; onClose: () => v
         <div ref={icons} hidden>
           <LogoMark size={64} />
           <TokenIcon market={data.market} size={56} />
-          <Cat />
+          <NiaPortrait mood="happy" className="waifu-share" />
         </div>
         <div className="share-actions">
           <button className="btn btn-primary" onClick={download} disabled={!blob}>

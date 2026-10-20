@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { setSetting, Settings, useSettings } from '../lib/settings';
+import { getSettings, setSetting, Settings, useSettings } from '../lib/settings';
+import { LeaveDialog } from './LeaveDialog';
 
 const OPTIONS: Array<{ key: keyof Settings; label: string; hint: string; indent?: boolean }> = [
-  { key: 'uwu', label: 'UWU mode', hint: 'Pastel theme with a cat, stars and clouds' },
-  { key: 'uwuless', label: 'UWU-less mode', hint: 'Plain theme: no decorations, gradients or animations' },
+  { key: 'uwu', label: 'UWU mode', hint: 'Pastel theme, night sky and Nia the mascot' },
+  { key: 'uwuless', label: 'UWU-less mode', hint: 'Night sky on the chart, no room and no Nia' },
   { key: 'showEntries', label: 'Entries on chart', hint: 'Entry price line for each open position' },
   { key: 'showMaxLoss', label: 'Max loss on chart', hint: 'Price where each position closes at 100% loss' },
   { key: 'showTrades', label: 'Trades on chart', hint: 'Markers where you opened and closed' },
@@ -16,6 +17,17 @@ const OPTIONS: Array<{ key: keyof Settings; label: string; hint: string; indent?
 export function SettingsMenu() {
   const s = useSettings();
   const [open, setOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  const change = (key: keyof Settings, value: boolean) => {
+    // Turning UWU off (or switching to UWU-less) asks Nia first.
+    const fromUwu = getSettings().uwu && ((key === 'uwu' && !value) || (key === 'uwuless' && value));
+    if (fromUwu) {
+      setOpen(false);
+      return setLeaving(true);
+    }
+    setSetting(key, value as never);
+  };
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,11 +58,20 @@ export function SettingsMenu() {
                 type="checkbox"
                 checked={s[o.key] as boolean}
                 disabled={o.key === 'showOthers' && !s.showTrades}
-                onChange={(e) => setSetting(o.key, e.target.checked as never)}
+                onChange={(e) => change(o.key, e.target.checked)}
               />
             </label>
           ))}
         </div>
+      )}
+      {leaving && (
+        <LeaveDialog
+          onStay={() => setLeaving(false)}
+          onLeave={() => {
+            setLeaving(false);
+            setSetting('uwuless', true);
+          }}
+        />
       )}
     </div>
   );

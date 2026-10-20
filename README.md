@@ -36,6 +36,7 @@ Optional variables (Settings → Variables), read at build time:
 | `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` or `testnet` |
 | `VITE_CONTRACT_ID` | _(empty)_ | NEAR contract account used for wallet sign-in |
 | `VITE_ORDERLY_BROKER_ID` | _(empty)_ | Your Orderly broker (builder) ID. Live mode stays off until it is set |
+| `VITE_NIA_IMAGE` | _(empty)_ | Optional custom mascot illustration (for example `/nia.png` placed in `public/`) |
 | `VITE_ORDERLY_NETWORK` | `mainnet` | Orderly network for Live mode. Leave unset for real trading on mainnet |
 
 ## Live mode (Orderly Network)

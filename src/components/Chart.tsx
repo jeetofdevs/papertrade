@@ -19,6 +19,7 @@ import { useActivity } from '../lib/activity';
 import { Market, Position, Trade } from '../lib/engine';
 import { Candle, loadCandles, loadTicks, onTick, usePrices } from '../lib/prices';
 import { setSetting, useSettings } from '../lib/settings';
+import { ChartScene } from './ChartScene';
 
 const INTERVALS = [
   { label: '1m', sec: 60 },
@@ -69,15 +70,16 @@ export function Chart({ market, positions, history }: { market: Market; position
 
   // Grid and text colours follow the theme.
   useEffect(() => {
-    const grid = settings.uwu ? 'rgba(255,255,255,0.06)' : '#121B18';
+    const themed = settings.uwu || settings.uwuless;
+    const grid = themed ? 'rgba(255,255,255,0.07)' : '#121B18';
     chart.current?.applyOptions({
-      layout: { textColor: settings.uwu ? '#B7A8E0' : '#7E8E88' },
+      layout: { textColor: themed ? '#C9BEF0' : '#7E8E88' },
       grid: { vertLines: { color: grid }, horzLines: { color: grid } },
-      rightPriceScale: { borderColor: settings.uwu ? '#3A3070' : '#1A2421' },
-      timeScale: { borderColor: settings.uwu ? '#3A3070' : '#1A2421' },
+      rightPriceScale: { borderColor: themed ? 'rgba(255,255,255,0.12)' : '#1A2421' },
+      timeScale: { borderColor: themed ? 'rgba(255,255,255,0.12)' : '#1A2421' },
     });
     if (series.current && settings.chartType === 'tick') {
-      series.current.applyOptions(settings.uwu ? { color: '#FF8FC7', lineWidth: 3 } : { color: '#E8EFEC', lineWidth: 2 });
+      series.current.applyOptions(settings.uwu ? { color: '#FF8FC7', lineWidth: 3 } : settings.uwuless ? { color: '#FFFFFF', lineWidth: 2 } : { color: '#E8EFEC', lineWidth: 2 });
     } else if (series.current) {
       series.current.applyOptions(
         settings.uwu
@@ -85,7 +87,7 @@ export function Chart({ market, positions, history }: { market: Market; position
           : { upColor: '#00EC97', downColor: '#FF5C7A', wickUpColor: '#00EC97', wickDownColor: '#FF5C7A' },
       );
     }
-  }, [settings.uwu, settings.chartType, version]);
+  }, [settings.uwu, settings.uwuless, settings.chartType, version]);
 
   // (Re)build the series for this market and chart type, then follow live ticks.
   useEffect(() => {
@@ -257,7 +259,9 @@ export function Chart({ market, positions, history }: { market: Market; position
   };
 
   return (
-    <div className="panel chart-panel">
+    <div className={`panel chart-panel ${settings.uwu || settings.uwuless ? 'chart-themed' : ''}`}>
+      {settings.uwu && <ChartScene variant="room" />}
+      {settings.uwuless && <ChartScene variant="sky" />}
       <div className="chart-toolbar">
         <button className={`chip ${tick ? 'chip-on' : ''}`} onClick={() => setSetting('chartType', 'tick')}>
           Tick
