@@ -2112,3 +2112,210 @@ html.uwuless .top {
 .live-steps .muted {
   font-weight: 400;
 }
+
+/* Position tracks (entry → take profit) */
+.tag-tp {
+  margin-left: 6px;
+  color: var(--mint);
+  background: rgba(0, 236, 151, 0.12);
+}
+.tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+.track {
+  padding: 14px 16px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  display: grid;
+  gap: 12px;
+}
+.track-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.track-roe {
+  font-weight: 700;
+  font-size: 15px;
+}
+.track-goal {
+  margin-left: auto;
+}
+.track-bar {
+  position: relative;
+  height: 14px;
+  margin: 10px 14px 4px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.track-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  opacity: 0.18;
+}
+.track-zone-loss {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background: linear-gradient(90deg, var(--red), transparent);
+}
+.track-zone-win {
+  right: 0;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(90deg, transparent, var(--mint));
+}
+.track-fill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 999px;
+  transition: left 0.35s ease, width 0.35s ease;
+}
+.track-fill-win {
+  background: var(--mint);
+  box-shadow: 0 0 12px rgba(0, 236, 151, 0.6);
+}
+.track-fill-loss {
+  background: var(--red);
+  box-shadow: 0 0 12px rgba(255, 92, 122, 0.5);
+}
+.track-tick {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--muted);
+}
+.track-rider {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -58%);
+  transition: left 0.35s ease;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+.track-flame {
+  transform-origin: 12px 12px;
+  animation: flame 0.18s ease-in-out infinite alternate;
+}
+@keyframes flame {
+  to {
+    transform: scaleX(0.6);
+    opacity: 0.7;
+  }
+}
+.track-flag {
+  position: absolute;
+  right: -10px;
+  top: -24px;
+  font-size: 18px;
+}
+.track-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.track-danger .track-rider {
+  animation: shake 0.25s linear infinite;
+}
+@keyframes shake {
+  25% {
+    margin-left: -2px;
+  }
+  75% {
+    margin-left: 2px;
+  }
+}
+.track-hit {
+  border-color: var(--mint);
+  box-shadow: 0 0 0 1px var(--mint), 0 0 30px rgba(0, 236, 151, 0.25);
+}
+
+/* Take profit / max loss burst */
+.celebrate {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.celebrate-bust {
+  animation: flash 0.6s ease-out;
+}
+@keyframes flash {
+  from {
+    background: rgba(255, 92, 122, 0.35);
+  }
+}
+.confetti {
+  position: absolute;
+  top: -12px;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  animation: fall linear forwards;
+}
+@keyframes fall {
+  to {
+    transform: translate(var(--drift), 105vh) rotate(var(--spin));
+    opacity: 0.4;
+  }
+}
+.celebrate-card {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  padding: 22px 30px;
+  border-radius: 20px;
+  background: rgba(7, 11, 10, 0.88);
+  border: 1px solid var(--mint);
+  box-shadow: 0 20px 60px rgba(0, 236, 151, 0.25);
+  animation: popin 2.6s ease forwards;
+}
+.celebrate-bust .celebrate-card {
+  border-color: var(--red);
+  box-shadow: 0 20px 60px rgba(255, 92, 122, 0.25);
+}
+.celebrate-card b {
+  font-size: 30px;
+  color: var(--mint);
+}
+.celebrate-bust .celebrate-card b {
+  color: var(--red);
+}
+.celebrate-card span {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+@keyframes popin {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+@media (max-width: 760px) {
+  .tracks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

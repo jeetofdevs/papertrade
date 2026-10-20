@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CelebrationHost, celebrate } from './components/Celebration';
 import { ConfirmHost } from './components/Confirm';
 import { UwuDecor } from './components/UwuDecor';
 import { Logo } from './components/Logo';
@@ -13,7 +14,7 @@ import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { usd } from './lib/format';
 import { startPrices } from './lib/prices';
 import { sound } from './lib/sound';
-import { dispatch, getState, onLiquidation, useStore } from './lib/store';
+import { dispatch, getState, onAutoClose, useStore } from './lib/store';
 import { ALLOW_GUEST, NETWORK, useWallet } from './lib/wallet';
 import { Earn } from './pages/Earn';
 import { Landing } from './pages/Landing';
@@ -49,9 +50,17 @@ export function App() {
     startActivity();
     const onHash = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHash);
-    const off = onLiquidation((m) => {
-      toast.err(m);
-      sound.bust();
+    const off = onAutoClose((t) => {
+      const roe = (t.pnl / (t.size / t.leverage)) * 100;
+      if (t.reason === 'tp') {
+        sound.win();
+        celebrate('tp', `+${roe.toFixed(0)}% take profit!`, `${t.market} ${t.side} ${t.leverage}x · +${t.pnl.toFixed(2)} USDC`);
+        toast.ok(`${t.market} ${t.side} ${t.leverage}x hit take profit: +${t.pnl.toFixed(2)} USDC`);
+      } else {
+        sound.bust();
+        celebrate('bust', 'Max loss', `${t.market} ${t.side} ${t.leverage}x · +${Math.round(t.nitro).toLocaleString('en-US')} NITRO`);
+        toast.err(`${t.market} ${t.side} ${t.leverage}x hit max loss — earned ${Math.round(t.nitro).toLocaleString('en-US')} NITRO`);
+      }
     });
     return () => {
       window.removeEventListener('hashchange', onHash);
@@ -126,6 +135,7 @@ export function App() {
       </footer>
       <Toasts />
       <ConfirmHost />
+      <CelebrationHost />
       <UwuDecor />
     </div>
   );

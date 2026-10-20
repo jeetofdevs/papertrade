@@ -101,4 +101,22 @@ describe('engine', () => {
     s = poolWithdraw(s, ME, shares).state;
     expect(account(s, ME).usdc).toBeCloseTo(1_100);
   });
+
+  it('closes at the take profit price', () => {
+    let s = openPosition(funded(), ME, { market: 'ETH', side: 'long', collateral: 100, leverage: 10, tpRoe: 50 }, 100, 1).state;
+    const pos = account(s, ME).positions[0];
+    expect(pos.tp).toBeCloseTo(105);
+    s = runLiquidations(s, { ETH: 104.9 }, 2);
+    expect(account(s, ME).positions).toHaveLength(1);
+    s = runLiquidations(s, { ETH: 106 }, 3);
+    const a = account(s, ME);
+    expect(a.positions).toHaveLength(0);
+    expect(a.history[0].reason).toBe('tp');
+    expect(a.history[0].pnl).toBeCloseTo(50); // paid at the TP price, not the overshoot
+  });
+
+  it('places a short take profit below entry', () => {
+    const s = openPosition(funded(), ME, { market: 'BTC', side: 'short', collateral: 10, leverage: 100, tpRoe: 100 }, 1000, 1).state;
+    expect(account(s, ME).positions[0].tp).toBeCloseTo(990);
+  });
 });

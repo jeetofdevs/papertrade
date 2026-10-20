@@ -5,6 +5,7 @@ import { LivePositions } from '../components/LivePositions';
 import { MarketBar } from '../components/MarketBar';
 import { OrderPanel } from '../components/OrderPanel';
 import { Positions } from '../components/Positions';
+import { PositionTrack } from '../components/PositionTrack';
 import { TradeTicker } from '../components/TradeTicker';
 import { account, Market, MARKETS, Position } from '../lib/engine';
 import { useHl } from '../lib/hl/store';
@@ -36,7 +37,7 @@ export function Trade() {
       leverage: p.leverage,
       size: p.value,
       entry: p.entry,
-      liq: p.liq ?? 0,
+      liq: p.liq ?? p.entry * (1 - (p.size > 0 ? 1 : -1) / p.leverage),
       openedAt: 0,
     }));
   const pick = (m: Market) => {
@@ -54,6 +55,13 @@ export function Trade() {
         <Chart market={market} positions={live ? livePositions : acct.positions} history={live ? [] : acct.history} />
         {live ? <LiveOrderPanel market={market} /> : <OrderPanel market={market} />}
       </div>
+      {(live ? livePositions : acct.positions).length > 0 && (
+        <div className="tracks">
+          {(live ? livePositions : acct.positions).slice(0, 6).map((p) => (
+            <PositionTrack key={p.id} p={p} />
+          ))}
+        </div>
+      )}
       <TradeTicker />
       {live ? <LivePositions /> : <Positions />}
     </div>

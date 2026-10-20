@@ -30,6 +30,8 @@ export interface Position {
   size: number;
   entry: number;
   liq: number;
+  /** Take profit price; the position closes automatically when the mark reaches it. */
+  tp?: number | null;
   openedAt: number;
 }
 
@@ -43,7 +45,7 @@ export interface Trade {
   exit: number;
   pnl: number;
   nitro: number;
-  reason: 'close' | 'liquidated';
+  reason: 'close' | 'liquidated' | 'tp';
   closedAt: number;
 }
 
@@ -133,6 +135,18 @@ export interface OpenParams {
   side: Side;
   collateral: number;
   leverage: number;
+  /** Take profit as a return on the wager, in percent (100 = doubles the wager). */
+  tpRoe?: number | null;
+}
+
+/** Price at which a position earns `roe` percent on its wager. */
+export function takeProfitPrice(entry: number, side: Side, leverage: number, roe: number): number {
+  return entry * (1 + (dir(side) * roe) / 100 / leverage);
+}
+
+export function hitTakeProfit(pos: Position, mark: number): boolean {
+  if (!pos.tp) return false;
+  return pos.side === 'long' ? mark >= pos.tp : mark <= pos.tp;
 }
 
 export function openPosition(state: State, id: string, p: OpenParams, mark: number, now: number): Result {
@@ -154,6 +168,7 @@ export function openPosition(state: State, id: string, p: OpenParams, mark: numb
     size,
     entry: mark,
     liq: liquidationPrice(mark, p.side, p.leverage),
+    tp: p.tpRoe ? takeProfitPrice(mark, p.side, p.leverage, p.tpRoe) : null,
     openedAt: now,
   };
   return {
@@ -231,14 +246,17 @@ export function closePosition(
   };
 }
 
-/** Liquidate every position whose mark price crossed its liquidation price. */
+/** Close positions that reached their take profit, and liquidate those past their max loss price. */
 export function runLiquidations(state: State, marks: Partial<Record<Market, number>>, now: number): State {
   let next = state;
   for (const [id, acct] of Object.entries(state.accounts)) {
     for (const pos of acct.positions) {
       const mark = marks[pos.market];
-      if (mark && isLiquidatable(pos, mark)) {
+      if (!mark) continue;
+      if (isLiquidatable(pos, mark)) {
         next = closePosition(next, id, pos.id, pos.liq, now, 'liquidated').state;
+      } else if (hitTakeProfit(pos, mark)) {
+        next = closePosition(next, id, pos.id, pos.tp!, now, 'tp').state;
       }
     }
   }

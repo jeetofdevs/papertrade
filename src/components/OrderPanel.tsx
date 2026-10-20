@@ -11,6 +11,7 @@ import {
   MAX_LEVERAGE,
   MAX_SIZE_OF_POOL,
   openPosition,
+  takeProfitPrice,
   Side,
 } from '../lib/engine';
 import { compact, price, usd } from '../lib/format';
@@ -39,6 +40,7 @@ export function OrderPanel({ market }: { market: Market }) {
   const [side, setSide] = useState<Side>('long');
   const [amount, setAmount] = useState('100');
   const [lev, setLev] = useState(100);
+  const [tpRoe, setTpRoe] = useState(100);
 
   const collateral = parseFloat(amount) || 0;
   const size = collateral * lev;
@@ -58,7 +60,7 @@ export function OrderPanel({ market }: { market: Market }) {
       });
       if (!ok) return;
     }
-    const err = dispatch((s) => openPosition(s, traderId, { market, side, collateral, leverage: lev }, mark, Date.now()));
+    const err = dispatch((s) => openPosition(s, traderId, { market, side, collateral, leverage: lev, tpRoe }, mark, Date.now()));
     if (err) toast.err(err);
     else {
       sound.open();
@@ -135,6 +137,20 @@ export function OrderPanel({ market }: { market: Market }) {
           {PRESETS.map((p) => (
             <button key={p} className={`chip ${lev === p ? 'chip-on' : ''}`} onClick={() => setLev(p)}>
               {p}x
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <div className="field-head">
+          <label>Take profit</label>
+          <span className="muted mono">{tpRoe && mark ? price(takeProfitPrice(mark, side, lev, tpRoe)) : 'off'}</span>
+        </div>
+        <div className="row-chips">
+          {[0, 25, 50, 100, 300, 1000].map((r) => (
+            <button key={r} className={`chip ${tpRoe === r ? 'chip-on' : ''}`} onClick={() => setTpRoe(r)}>
+              {r ? `+${r}%` : 'Off'}
             </button>
           ))}
         </div>

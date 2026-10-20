@@ -1,7 +1,7 @@
 // App state: the engine State, persisted to localStorage, with a React hook.
 
 import { useSyncExternalStore } from 'react';
-import { initialState, Result, runLiquidations, State } from './engine';
+import { initialState, Result, runLiquidations, State, Trade } from './engine';
 import { getMarks, onTick } from './prices';
 
 const KEY = 'nitro:state:v1';
@@ -55,25 +55,23 @@ export function resetDemo() {
   set(initialState());
 }
 
-// Keeper: liquidate positions as prices move.
-const liqListeners = new Set<(msg: string) => void>();
-export function onLiquidation(fn: (msg: string) => void) {
-  liqListeners.add(fn);
-  return () => liqListeners.delete(fn);
+// Keeper: close positions at take profit or max loss as prices move.
+const autoListeners = new Set<(t: Trade) => void>();
+export function onAutoClose(fn: (t: Trade) => void) {
+  autoListeners.add(fn);
+  return () => autoListeners.delete(fn);
 }
 
 onTick(() => {
   const before = state;
   const next = runLiquidations(state, getMarks(), Date.now());
-  if (next !== before) {
-    for (const [id, acct] of Object.entries(next.accounts)) {
-      const prev = before.accounts[id];
-      const fresh = acct.history.filter((t) => t.reason === 'liquidated' && !prev?.history.some((h) => h.id === t.id));
-      fresh.forEach((t) =>
-        liqListeners.forEach((l) => l(`${t.market} ${t.side} ${t.leverage}x hit max loss — earned ${Math.round(t.nitro).toLocaleString()} NITRO`)),
-      );
-    }
-    set(next);
+  if (next === before) return;
+  set(next);
+  for (const [id, acct] of Object.entries(next.accounts)) {
+    const prev = before.accounts[id];
+    acct.history
+      .filter((t) => t.reason !== 'close' && !prev?.history.some((h) => h.id === t.id))
+      .forEach((t) => autoListeners.forEach((l) => l(t)));
   }
 });
 

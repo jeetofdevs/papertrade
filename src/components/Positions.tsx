@@ -177,6 +177,7 @@ export function Positions() {
                     </span>{' '}
                     <span className="pair"><TokenIcon market={t.market} size={20} /><b>{t.market}</b></span>
                     {t.reason === 'liquidated' && <span className="tag tag-liq">max loss</span>}
+                    {t.reason === 'tp' && <span className="tag tag-tp">take profit</span>}
                   </td>
                   <td className="mono">{usd(t.size)}</td>
                   <td className="mono">{price(t.entry)}</td>
