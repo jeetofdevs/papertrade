@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { ConfirmHost } from './components/Confirm';
+import { UwuDecor } from './components/UwuDecor';
 import { Logo } from './components/Logo';
 import { ModeToggle } from './components/ModeToggle';
 import { ProfileMenu } from './components/ProfileMenu';
@@ -112,6 +114,8 @@ export function App() {
         <span className="muted">Prices: Binance public feed, simulated when offline</span>
       </footer>
       <Toasts />
+      <ConfirmHost />
+      <UwuDecor />
     </div>
   );
 }

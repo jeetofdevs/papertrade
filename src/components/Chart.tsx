@@ -67,6 +67,17 @@ export function Chart({ market, positions, history }: { market: Market; position
     };
   }, []);
 
+  // Grid and text colours follow the theme.
+  useEffect(() => {
+    const grid = settings.uwu ? 'rgba(255,255,255,0.06)' : '#121B18';
+    chart.current?.applyOptions({
+      layout: { textColor: settings.uwu ? '#B7A8E0' : '#7E8E88' },
+      grid: { vertLines: { color: grid }, horzLines: { color: grid } },
+      rightPriceScale: { borderColor: settings.uwu ? '#3A3070' : '#1A2421' },
+      timeScale: { borderColor: settings.uwu ? '#3A3070' : '#1A2421' },
+    });
+  }, [settings.uwu]);
+
   // (Re)build the series for this market and chart type, then follow live ticks.
   useEffect(() => {
     const c = chart.current;

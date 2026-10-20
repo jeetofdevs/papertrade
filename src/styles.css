@@ -768,7 +768,7 @@ main {
   position: fixed;
   right: 16px;
   top: 72px;
-  z-index: 100;
+  z-index: 30;
   display: grid;
   gap: 8px;
 }
@@ -1749,4 +1749,254 @@ main {
   .split-2 {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Confirm dialog */
+.confirm {
+  width: min(420px, 100%);
+}
+.confirm h3 {
+  font-size: 20px;
+}
+.confirm p {
+  margin: 0;
+}
+.confirm-badge,
+.childproof-badge {
+  justify-self: start;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--amber);
+  background: rgba(255, 181, 71, 0.1);
+}
+.childproof-badge {
+  align-self: flex-start;
+  margin-bottom: -8px;
+}
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* ---------- UWU mode ---------- */
+html.uwu {
+  --bg: #1b1638;
+  --panel: #251e4a;
+  --panel-2: #2f2660;
+  --border: #3a3070;
+  --border-2: #4a3e88;
+  --text: #fdf4ff;
+  --muted: #b7a8e0;
+  --mint: #7ff0c4;
+  --mint-dim: #5fd4a8;
+  --red: #ff7eb6;
+  --amber: #ffd27a;
+  --paper: #fff0fa;
+  --pink: #ff8fc7;
+  --radius: 18px;
+}
+html.uwu body {
+  font-family: Nunito, Inter, system-ui, sans-serif;
+}
+html.uwu .app {
+  background:
+    radial-gradient(900px 500px at 20% -10%, rgba(255, 143, 199, 0.22), transparent 60%),
+    radial-gradient(900px 500px at 100% 20%, rgba(150, 120, 255, 0.25), transparent 60%),
+    linear-gradient(180deg, #1b1638, #2a1f55);
+}
+html.uwu .top {
+  background: rgba(27, 22, 56, 0.8);
+}
+html.uwu .logo-dot,
+html.uwu .accent,
+html.uwu .eyebrow {
+  color: var(--pink);
+}
+html.uwu .btn-primary,
+html.uwu .mode-real,
+html.uwu .hero2-pill {
+  background: linear-gradient(135deg, #ff8fc7, #c79bff);
+  color: #2a0f2e;
+  border-color: transparent;
+}
+html.uwu .hero2-pill {
+  color: #2a0f2e;
+}
+html.uwu .btn,
+html.uwu .chip,
+html.uwu .panel,
+html.uwu .input,
+html.uwu .seg,
+html.uwu .summary {
+  border-radius: 18px;
+}
+html.uwu .chip-on {
+  color: var(--pink);
+  border-color: rgba(255, 143, 199, 0.5);
+  background: rgba(255, 143, 199, 0.12);
+}
+html.uwu .slider {
+  background: linear-gradient(90deg, var(--pink) var(--fill), var(--border-2) var(--fill));
+}
+html.uwu .slider::-webkit-slider-thumb {
+  border-color: var(--pink);
+}
+html.uwu .tab-on {
+  border-bottom-color: var(--pink);
+}
+html.uwu .chart-panel {
+  background:
+    radial-gradient(1px 1px at 12% 22%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 38% 64%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 72% 18%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 86% 52%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 56% 82%, #fff 99%, transparent),
+    linear-gradient(180deg, #2b2168, #3a2c80);
+}
+html.uwu .hero2-grad {
+  background: linear-gradient(90deg, #ff8fc7, #c79bff, #7ff0c4);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.uwu-decor {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+.uwu-stars {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(2px 2px at 8% 30%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 22% 80%, #ffd6ec 99%, transparent),
+    radial-gradient(2px 2px at 48% 12%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 66% 70%, #e6dbff 99%, transparent),
+    radial-gradient(2px 2px at 90% 36%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 78% 92%, #ffd6ec 99%, transparent);
+  opacity: 0.6;
+  animation: twinkle 3s ease-in-out infinite;
+}
+@keyframes twinkle {
+  50% {
+    opacity: 0.25;
+  }
+}
+.uwu-cloud {
+  position: absolute;
+  width: 110px;
+  opacity: 0.9;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.15));
+  animation: drift 22s linear infinite;
+}
+.uwu-cloud-1 {
+  top: 70px;
+  left: -120px;
+}
+.uwu-cloud-2 {
+  top: 220px;
+  left: -120px;
+  width: 80px;
+  animation-duration: 34s;
+  animation-delay: -12s;
+}
+@keyframes drift {
+  to {
+    transform: translateX(calc(100vw + 240px));
+  }
+}
+.uwu-cat {
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  width: 104px;
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.3));
+  animation: bob 3.5s ease-in-out infinite;
+}
+.uwu-eyes {
+  transform-origin: 100px 84px;
+  animation: blink 5s infinite;
+}
+@keyframes bob {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+@media (max-width: 760px) {
+  .uwu-cat {
+    width: 84px;
+    right: 6px;
+    opacity: 0.85;
+  }
+  .uwu-cloud {
+    width: 70px;
+  }
+}
+
+/* ---------- UWU-less mode ---------- */
+html.uwuless {
+  --radius: 6px;
+}
+html.uwuless .app,
+html.uwuless .hero2,
+html.uwuless .lp-final,
+html.uwuless .lp-example,
+html.uwuless .hero,
+html.uwuless .profile-hero,
+html.uwuless .pm-balance {
+  background: var(--bg);
+}
+html.uwuless .panel,
+html.uwuless .hero2 {
+  background: var(--panel);
+}
+html.uwuless *,
+html.uwuless *::before,
+html.uwuless *::after {
+  animation: none !important;
+  transition: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+html.uwuless .hero2-chart,
+html.uwuless .hero2-mark,
+html.uwuless .hero-mark,
+html.uwuless .near-dot {
+  filter: none;
+  box-shadow: none;
+}
+html.uwuless .hero2-chart {
+  display: none;
+}
+html.uwuless .hero2-grad {
+  background: none;
+  color: var(--mint);
+}
+html.uwuless .btn,
+html.uwuless .chip,
+html.uwuless .input,
+html.uwuless .seg,
+html.uwuless .summary {
+  border-radius: 6px;
+}
+html.uwuless .top {
+  backdrop-filter: none;
+  background: var(--bg);
 }

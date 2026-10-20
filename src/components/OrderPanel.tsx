@@ -17,7 +17,8 @@ import { compact, price, usd } from '../lib/format';
 import { usePrices } from '../lib/prices';
 import { dispatch, useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
-import { getSettings } from '../lib/settings';
+import { getSettings, useSettings } from '../lib/settings';
+import { confirmDialog } from './Confirm';
 import { sound } from '../lib/sound';
 import { toast } from './Toasts';
 
@@ -34,6 +35,7 @@ export function OrderPanel({ market }: { market: Market }) {
   const acct = account(state, traderId);
   const mark = tickers[market]?.price ?? 0;
 
+  const { childproof } = useSettings();
   const [side, setSide] = useState<Side>('long');
   const [amount, setAmount] = useState('100');
   const [lev, setLev] = useState(100);
@@ -44,12 +46,16 @@ export function OrderPanel({ market }: { market: Market }) {
   const maxSize = state.pool.liquidity * MAX_SIZE_OF_POOL;
   const moveToLiq = (100 / lev).toFixed(lev >= 100 ? 3 : 2);
 
-  const submit = () => {
-    if (getSettings().childproof && (lev > 100 || collateral > acct.usdc / 2)) {
-      const ok = window.confirm(
-        `Childproof check: ${side} ${market} at ${lev}x with ${usd(collateral)} USDC. ` +
-          `A ${moveToLiq}% move against you loses the whole wager. Continue?`,
-      );
+  const submit = async () => {
+    if (getSettings().childproof) {
+      const ok = await confirmDialog({
+        title: `${side === 'long' ? 'Long' : 'Short'} ${market} ${lev}x?`,
+        body:
+          `Wager ${usd(collateral)} USDC for a ${usd(size, 0)} USDC position. ` +
+          `A ${moveToLiq}% move against you hits your max loss and you lose the whole wager.`,
+        confirmLabel: `Open ${side}`,
+        danger: side === 'short',
+      });
       if (!ok) return;
     }
     const err = dispatch((s) => openPosition(s, traderId, { market, side, collateral, leverage: lev }, mark, Date.now()));
@@ -75,6 +81,7 @@ export function OrderPanel({ market }: { market: Market }) {
           <span className="muted small">{MARKET_NAME[market]} · up to {MAX_LEVERAGE}x</span>
         </div>
       </div>
+      {childproof && <span className="childproof-badge">Childproof on · every trade asks to confirm</span>}
       <div className="seg">
         <button className={`seg-btn ${side === 'long' ? 'seg-long' : ''}`} onClick={() => setSide('long')}>
           Long

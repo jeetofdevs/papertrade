@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { setSetting, Settings, useSettings } from '../lib/settings';
 
 const OPTIONS: Array<{ key: keyof Settings; label: string; hint: string; indent?: boolean }> = [
+  { key: 'uwu', label: 'UWU mode', hint: 'Pastel theme with a cat, stars and clouds' },
+  { key: 'uwuless', label: 'UWU-less mode', hint: 'Plain theme: no decorations, gradients or animations' },
   { key: 'showEntries', label: 'Entries on chart', hint: 'Entry price line for each open position' },
   { key: 'showMaxLoss', label: 'Max loss on chart', hint: 'Price where each position closes at 100% loss' },
   { key: 'showTrades', label: 'Trades on chart', hint: 'Markers where you opened and closed' },
   { key: 'showOthers', label: 'Others on chart', hint: 'Markers for other traders', indent: true },
   { key: 'antiSocial', label: 'Anti-social', hint: 'Hide the live trades ticker' },
-  { key: 'childproof', label: 'Childproof mode', hint: 'Confirm before trades above 100x or half your balance' },
+  { key: 'childproof', label: 'Childproof mode', hint: 'Ask to confirm before every open and close' },
   { key: 'sound', label: 'Sound', hint: 'Sound effects for opens, wins and max losses' },
 ];
 

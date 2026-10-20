@@ -13,6 +13,10 @@ export interface Settings {
   antiSocial: boolean;
   childproof: boolean;
   sound: boolean;
+  /** Pastel theme with cute decorations. */
+  uwu: boolean;
+  /** Plain theme: no decorations, gradients or animations. */
+  uwuless: boolean;
 }
 
 const KEY = 'nitro:settings:v1';
@@ -26,6 +30,8 @@ const DEFAULTS: Settings = {
   antiSocial: false,
   childproof: false,
   sound: true,
+  uwu: false,
+  uwuless: false,
 };
 
 let settings: Settings = DEFAULTS;
@@ -42,6 +48,9 @@ export function getSettings() {
 
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
   settings = { ...settings, [key]: value };
+  // The two themes are opposites.
+  if (key === 'uwu' && value) settings.uwuless = false;
+  if (key === 'uwuless' && value) settings.uwu = false;
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
   } catch {

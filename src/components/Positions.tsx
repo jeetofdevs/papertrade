@@ -1,4 +1,6 @@
+import { getSettings } from '../lib/settings';
 import { sound } from '../lib/sound';
+import { confirmDialog } from './Confirm';
 import { ShareCard, ShareData } from './ShareCard';
 import { TokenIcon } from './TokenIcon';
 import { useState } from 'react';
@@ -17,7 +19,16 @@ export function Positions() {
   const acct = account(state, traderId);
   const [tab, setTab] = useState<'open' | 'history'>('open');
 
-  const close = (id: string, mark: number) => {
+  const close = async (id: string, mark: number) => {
+    if (getSettings().childproof) {
+      const p = acct.positions.find((x) => x.id === id);
+      const ok = await confirmDialog({
+        title: 'Close this position?',
+        body: p ? `${p.market} ${p.side} ${p.leverage}x closes at ${price(mark)} for ${signed(unrealizedPnl(p, mark))} USDC.` : 'Close at the current mark price.',
+        confirmLabel: 'Close position',
+      });
+      if (!ok) return;
+    }
     const before = account(state, traderId);
     const err = dispatch((s) => closePosition(s, traderId, id, mark, Date.now()));
     if (err) return toast.err(err);
@@ -32,7 +43,16 @@ export function Positions() {
 
   const openPnl = acct.positions.reduce((sum, p) => sum + unrealizedPnl(p, tickers[p.market]?.price ?? p.entry), 0);
 
-  const closeAll = () => {
+  const closeAll = async () => {
+    if (getSettings().childproof) {
+      const ok = await confirmDialog({
+        title: `Close all ${acct.positions.length} positions?`,
+        body: `Everything closes at the current mark prices for about ${signed(openPnl)} USDC.`,
+        confirmLabel: 'Close all',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     const now = Date.now();
     const total = openPnl;
     for (const p of acct.positions) {
