@@ -76,7 +76,16 @@ export function Chart({ market, positions, history }: { market: Market; position
       rightPriceScale: { borderColor: settings.uwu ? '#3A3070' : '#1A2421' },
       timeScale: { borderColor: settings.uwu ? '#3A3070' : '#1A2421' },
     });
-  }, [settings.uwu]);
+    if (series.current && settings.chartType === 'tick') {
+      series.current.applyOptions(settings.uwu ? { color: '#FF8FC7', lineWidth: 3 } : { color: '#E8EFEC', lineWidth: 2 });
+    } else if (series.current) {
+      series.current.applyOptions(
+        settings.uwu
+          ? { upColor: '#7FF0C4', downColor: '#FF8FC7', wickUpColor: '#7FF0C4', wickDownColor: '#FF8FC7' }
+          : { upColor: '#00EC97', downColor: '#FF5C7A', wickUpColor: '#00EC97', wickDownColor: '#FF5C7A' },
+      );
+    }
+  }, [settings.uwu, settings.chartType, version]);
 
   // (Re)build the series for this market and chart type, then follow live ticks.
   useEffect(() => {
