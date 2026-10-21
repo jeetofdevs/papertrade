@@ -18,7 +18,7 @@ export function PoolAccountCard() {
     return (
       <section className="panel pad pool-card" id="pool">
         <h2>USDC balance</h2>
-        <p className="muted">Live trading is launching soon. Deposits open as soon as the Nitro pool is live.</p>
+        <p className="muted">USDC deposits are not open yet. They open as soon as the Nitro trading contract is live on NEAR mainnet.</p>
       </section>
     );
   }
@@ -56,10 +56,6 @@ export function PoolAccountCard() {
         <div>
           <span className="label">In your wallet</span>
           <b className="mono">${usd(pool.wallet)}</b>
-        </div>
-        <div>
-          <span className="label">NITRO earned</span>
-          <b className="mono">{usd(pool.nitro)}</b>
         </div>
       </div>
       {pool.error && <p className="hint err">Could not load your balance: {pool.error}</p>}

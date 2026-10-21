@@ -92,7 +92,7 @@ function PoolOrderPanel({ market }: { market: Market }) {
 
   let problem: string | null = null;
   if (!accountId) problem = 'Connect your NEAR wallet to trade.';
-  else if (pool.missing) problem = 'The Nitro pool is launching soon.';
+  else if (pool.missing) problem = 'Live USDC trading opens as soon as the Nitro contract is live on NEAR mainnet.';
   else if (wager > pool.balance) problem = 'Not enough balance. Deposit USDC first.';
   else if (wager > 0 && wager < pool.config.minWager) problem = `Minimum wager is ${usd(pool.config.minWager)} USDC.`;
   else if (pool.ready && size > maxSize) problem = `Max position size right now is ${usd(maxSize, 0)} USDC.`;

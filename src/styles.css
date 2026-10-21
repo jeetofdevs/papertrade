@@ -3772,7 +3772,7 @@ html.uwuless .chart-scene .sky-comet {
 .pool-card h2 { margin: 0; font-size: 18px; }
 .pool-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .pool-head .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.pool-balances { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pool-balances { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .pool-balances > div { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 4px; }
 .pool-balances b { font-size: 18px; }
 .pool-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
@@ -3786,7 +3786,6 @@ html.uwuless .chart-scene .sky-comet {
 .pool-rules b { color: var(--text); }
 @media (max-width: 640px) {
   .pool-balances { grid-template-columns: 1fr 1fr; }
-  .pool-balances > div:last-child { grid-column: span 2; }
   .pool-copy { grid-template-columns: minmax(0, 1fr) auto; }
   .pool-copy .label { grid-column: span 2; }
 }

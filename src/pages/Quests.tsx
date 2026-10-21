@@ -106,7 +106,7 @@ export function Quests() {
             <b>Quests count real USDC trades only</b>
             <p className="muted small">
               {!LIVE_AVAILABLE
-                ? 'Live trading is launching soon. Quests start counting once it is live.'
+                ? 'Live USDC trading is not open yet. Quests start counting once it is.'
                 : mode !== 'live'
                   ? 'Demo trades do not count. Switch to Live to make progress.'
                   : 'Connect your NEAR wallet to load your trades.'}
