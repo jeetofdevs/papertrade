@@ -476,3 +476,126 @@ fn cannot_request_more_than_balance() {
     t.as_("alice.near");
     t.c.request_withdraw(U128(1_001 * USDC));
 }
+
+fn promo_setup() -> T {
+    let mut t = setup();
+    t.deposit("owner.near", 300, "promo"); // budget for 100 bonuses
+    t.deposit("bob.near", 2, "");
+    t
+}
+
+#[test]
+fn bonus_needs_a_deposit_and_is_claimed_once() {
+    let mut t = promo_setup();
+    assert_eq!(t.c.get_promo().budget.0, 300 * USDC);
+    t.as_("bob.near");
+    assert_eq!(t.c.claim_promo().0, 3 * USDC);
+    let a = t.c.get_account(acc("bob.near"));
+    assert_eq!(a.balance.0, 5 * USDC);
+    assert_eq!(a.promo_wager_required.0, 60 * USDC);
+    assert_eq!(t.c.get_promo().budget.0, 297 * USDC);
+    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_bonus");
+    // Promo USDC is accounted for: the books still balance.
+    assert_eq!(t.c.get_pool().accounted.0, (1_000_000 + 1_000 + 300 + 2) * USDC);
+}
+
+#[test]
+#[should_panic(expected = "already claimed")]
+fn bonus_only_once() {
+    let mut t = promo_setup();
+    t.as_("bob.near");
+    t.c.claim_promo();
+    t.c.claim_promo();
+}
+
+#[test]
+#[should_panic(expected = "Deposit the minimum first")]
+fn bonus_needs_min_deposit() {
+    let mut t = promo_setup();
+    t.deposit("carol.near", 1, "");
+    t.as_("carol.near");
+    t.c.claim_promo();
+}
+
+#[test]
+#[should_panic(expected = "budget is used up")]
+fn bonus_needs_budget() {
+    let mut t = setup();
+    t.deposit("bob.near", 2, "");
+    t.as_("bob.near");
+    t.c.claim_promo();
+}
+
+#[test]
+#[should_panic(expected = "bonus is still locked")]
+fn withdrawals_locked_until_turnover() {
+    let mut t = promo_setup();
+    t.as_("bob.near");
+    t.c.claim_promo();
+    t.c.request_withdraw(U128(USDC));
+}
+
+#[test]
+fn turnover_unlocks_withdrawals_and_quick_flips_do_not_count() {
+    let mut t = promo_setup();
+    t.deposit("bob.near", 100, "");
+    t.as_("bob.near");
+    t.c.claim_promo();
+    // Opened and closed within the same minute: does not count.
+    let id = t.c.open_position("NEAR".into(), true, U128(50 * USDC), 1, None, None);
+    t.later(10);
+    t.price("NEAR", 3 * P);
+    t.as_("bob.near");
+    t.c.close_position(id, None);
+    assert_eq!(t.c.get_account(acc("bob.near")).promo_wagered.0, 0);
+    // Held for over a minute: counts. Two of them reach $60.
+    for _ in 0..2 {
+        t.as_("bob.near");
+        let id = t.c.open_position("NEAR".into(), true, U128(30 * USDC), 1, None, None);
+        t.later(61);
+        t.price("NEAR", 3 * P);
+        t.as_("bob.near");
+        t.c.close_position(id, None);
+    }
+    let a = t.c.get_account(acc("bob.near"));
+    assert_eq!(a.promo_wager_required.0, 0);
+    assert_eq!(a.promo_bonus.0, 0);
+    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_unlocked");
+    t.c.request_withdraw(U128(USDC)); // unlocked
+}
+
+#[test]
+fn bonus_ends_when_the_balance_is_gone() {
+    let mut t = promo_setup();
+    t.as_("bob.near");
+    t.c.claim_promo();
+    let id = t.c.open_position("NEAR".into(), true, U128(5 * USDC), 1000, None, None);
+    t.later(5);
+    t.price("NEAR", 2 * P);
+    t.as_("keeper.near");
+    t.c.run_keeper(vec![id]);
+    let a = t.c.get_account(acc("bob.near"));
+    assert_eq!(a.balance.0, 0);
+    assert_eq!(a.promo_wager_required.0, 0);
+    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_ended");
+}
+
+#[test]
+fn leaderboard_lists_every_user_once() {
+    let mut t = setup(); // lp + alice
+    t.deposit("alice.near", 5, "");
+    t.deposit("bob.near", 2, "");
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(100 * USDC), 10, None, None);
+    t.price("NEAR", 3_150_000_00);
+    t.as_("alice.near");
+    t.c.close_position(id, None);
+    assert_eq!(t.c.get_user_count(), 3);
+    let all = t.c.get_users_stats(None, None);
+    let names: Vec<String> = all.iter().map(|u| u.account.to_string()).collect();
+    assert_eq!(names, vec!["lp.near", "alice.near", "bob.near"]);
+    assert_eq!(all[1].volume.0, 1_000 * USDC);
+    assert_eq!(all[1].profit.0, 45 * USDC);
+    assert_eq!(all[1].trades, 1);
+    assert_eq!(t.c.get_users_stats(Some(2), Some(5)).len(), 1);
+}

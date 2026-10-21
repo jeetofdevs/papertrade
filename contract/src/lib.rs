@@ -15,7 +15,7 @@
 //!   move trader balances or vault liquidity.
 
 use near_sdk::json_types::U128;
-use near_sdk::store::{IterableMap, LookupMap, LookupSet};
+use near_sdk::store::{IterableMap, LookupMap, LookupSet, Vector};
 use near_sdk::{
     env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseError, PromiseOrValue,
 };
@@ -49,6 +49,14 @@ pub struct Config {
     pub spread_bps: u32,
     /// Smallest trading deposit, in USDC base units.
     pub min_deposit: U128,
+    /// New-user bonus credited by `claim_promo` (0 turns the promo off).
+    pub promo_amount: U128,
+    /// Deposits needed before the bonus can be claimed.
+    pub promo_min_deposit: U128,
+    /// Wagers needed to unlock withdrawals, as a multiple of the bonus (20 = 20x).
+    pub promo_wager_multiple: u32,
+    /// A position must stay open this long for its wager to count toward the turnover.
+    pub promo_min_hold_sec: u64,
 }
 
 #[near(serializers = [borsh, json])]
@@ -75,6 +83,36 @@ pub struct Account {
     pub trades: u32,
     /// USDC locked in withdrawal requests waiting for review.
     pub pending_withdraw: U128,
+    /// The new-user bonus was claimed (once per account).
+    pub promo_claimed: bool,
+    /// Bonus still under its turnover requirement (0 = no active bonus).
+    pub promo_bonus: U128,
+    /// Wagers still needed before withdrawals unlock, and wagers counted so far.
+    pub promo_wager_required: U128,
+    pub promo_wagered: U128,
+}
+
+/// Public trading stats for the leaderboard.
+#[near(serializers = [json])]
+pub struct UserStats {
+    pub account: AccountId,
+    pub volume: U128,
+    pub profit: U128,
+    pub loss: U128,
+    pub trades: u32,
+    pub nitro: U128,
+}
+
+#[near(serializers = [json])]
+pub struct PromoView {
+    pub amount: U128,
+    pub min_deposit: U128,
+    pub wager_multiple: u32,
+    pub min_hold_sec: u64,
+    /// USDC set aside for bonuses that have not been claimed yet.
+    pub budget: U128,
+    pub claims: u32,
+    pub active: bool,
 }
 
 /// A withdrawal waiting for the owner's review.
@@ -218,6 +256,11 @@ pub struct Contract {
     ledger: LookupMap<AccountId, Vec<LedgerEntry>>,
     withdraw_requests: IterableMap<u64, WithdrawRequest>,
     next_withdraw_id: u64,
+    /// USDC funded for bonuses (deposit with msg "promo"), not yet claimed.
+    promo_budget: u128,
+    promo_claims: u32,
+    /// Every account that has used the contract, in order of first use.
+    users: Vector<AccountId>,
 }
 
 fn mul_div(a: u128, b: u128, c: u128) -> u128 {
@@ -246,6 +289,10 @@ impl Contract {
                 markets: vec!["NEAR".into(), "BTC".into(), "ETH".into(), "SOL".into()],
                 spread_bps: 0,
                 min_deposit: U128(1_000_000),
+                promo_amount: U128(3_000_000),
+                promo_min_deposit: U128(2_000_000),
+                promo_wager_multiple: 20,
+                promo_min_hold_sec: 60,
             },
             accounts: LookupMap::new(b"a"),
             positions: LookupMap::new(b"p"),
@@ -264,6 +311,9 @@ impl Contract {
             ledger: LookupMap::new(b"l"),
             withdraw_requests: IterableMap::new(b"w"),
             next_withdraw_id: 1,
+            promo_budget: 0,
+            promo_claims: 0,
+            users: Vector::new(b"u"),
         }
     }
 
@@ -296,7 +346,12 @@ impl Contract {
                 self.log(&sender_id, LedgerEntry::new("vault_deposit", amount));
                 env::log_str(&format!("EVENT_JSON:{{\"event\":\"vault_deposit\",\"account\":\"{}\",\"amount\":\"{}\",\"shares\":\"{}\"}}", sender_id, amount, shares));
             }
-            _ => env::panic_str("Unknown msg: use \"\" to trade or \"vault\" to provide liquidity"),
+            "promo" => {
+                // Funds the new-user bonus. This USDC can only be paid out as bonuses (or back by the owner).
+                self.promo_budget += amount;
+                self.log(&sender_id, LedgerEntry::new("promo_fund", amount));
+            }
+            _ => env::panic_str("Unknown msg: use \"\" to trade, \"vault\" to provide liquidity or \"promo\" to fund bonuses"),
         }
         self.accounts.insert(sender_id, acct);
         self.accounted += amount;
@@ -304,12 +359,73 @@ impl Contract {
     }
 
     /// Withdraw free trading balance.
+    /// Claim the new-user bonus: requires `promo_min_deposit` of deposits, once per account.
+    /// The whole balance stays locked for withdrawals until the turnover is reached.
+    pub fn claim_promo(&mut self) -> U128 {
+        let who = env::predecessor_account_id();
+        let mut acct = self.account(&who);
+        let amount = self.config.promo_amount.0;
+        require!(amount > 0, "There is no promo right now");
+        require!(!acct.promo_claimed, "You already claimed the bonus");
+        require!(acct.total_deposited.0 >= self.config.promo_min_deposit.0, "Deposit the minimum first to claim the bonus");
+        require!(self.promo_budget >= amount, "The promo budget is used up");
+        self.promo_budget -= amount;
+        self.promo_claims += 1;
+        acct.balance = U128(acct.balance.0 + amount);
+        acct.promo_claimed = true;
+        acct.promo_bonus = U128(amount);
+        acct.promo_wager_required = U128(amount * self.config.promo_wager_multiple as u128);
+        acct.promo_wagered = U128(0);
+        self.accounts.insert(who.clone(), acct);
+        self.log(&who, LedgerEntry::new("promo_bonus", amount));
+        U128(amount)
+    }
+
+    pub fn get_user_count(&self) -> u32 {
+        self.users.len()
+    }
+
+    /// Trading stats of every user, in pages, for the leaderboard.
+    pub fn get_users_stats(&self, from_index: Option<u32>, limit: Option<u32>) -> Vec<UserStats> {
+        let from = from_index.unwrap_or(0);
+        let end = (from + limit.unwrap_or(100).min(200)).min(self.users.len());
+        (from..end)
+            .filter_map(|i| self.users.get(i))
+            .map(|id| {
+                let a = self.get_account(id.clone());
+                UserStats { account: id.clone(), volume: a.volume, profit: a.profit, loss: a.loss, trades: a.trades, nitro: a.nitro }
+            })
+            .collect()
+    }
+
+    pub fn get_promo(&self) -> PromoView {
+        PromoView {
+            amount: self.config.promo_amount,
+            min_deposit: self.config.promo_min_deposit,
+            wager_multiple: self.config.promo_wager_multiple,
+            min_hold_sec: self.config.promo_min_hold_sec,
+            budget: U128(self.promo_budget),
+            claims: self.promo_claims,
+            active: self.config.promo_amount.0 > 0 && self.promo_budget >= self.config.promo_amount.0,
+        }
+    }
+
+    /// Owner: take unclaimed promo budget back.
+    pub fn withdraw_promo_budget(&mut self, amount: U128) -> Promise {
+        self.assert_owner();
+        require!(amount.0 > 0 && amount.0 <= self.promo_budget, "Not enough promo budget");
+        self.promo_budget -= amount.0;
+        let owner = self.owner.clone();
+        self.send_usdc(owner, amount.0)
+    }
+
     /// Ask to withdraw free balance. The amount is locked until the owner approves (USDC is sent)
     /// or rejects it (the amount returns to the balance). The user can cancel while it waits.
     pub fn request_withdraw(&mut self, amount: U128) -> u64 {
         let who = env::predecessor_account_id();
         let mut acct = self.account(&who);
         require!(amount.0 > 0 && amount.0 <= acct.balance.0, "Not enough free balance");
+        require!(acct.promo_wager_required.0 == 0, "Your bonus is still locked: reach the trading turnover first");
         let open = self.withdraw_requests.values().filter(|r| r.account == who).count();
         require!(open < 5, "You already have 5 withdrawals waiting for review");
         acct.balance = U128(acct.balance.0 - amount.0);
@@ -697,6 +813,10 @@ impl Contract {
     }
 
     fn log(&mut self, who: &AccountId, e: LedgerEntry) {
+        let first = !self.ledger.contains_key(who);
+        if first {
+            self.users.push(who.clone());
+        }
         let mut list = self.ledger.get(who).cloned().unwrap_or_default();
         list.push(e);
         if list.len() > LEDGER_MAX {
@@ -801,9 +921,38 @@ impl Contract {
             "EVENT_JSON:{{\"event\":\"close\",\"id\":{},\"account\":\"{}\",\"pnl\":\"{}\",\"fee\":\"{}\",\"exit\":\"{}\",\"reason\":\"{}\"}}",
             pos.id, pos.owner, pnl, fee, exit, reason
         ));
+        let promo = self.track_promo(&pos, &mut acct);
         self.accounts.insert(pos.owner.clone(), acct);
         self.positions.remove(&pos.id);
+        if let Some((kind, bonus)) = promo {
+            self.log(&pos.owner, LedgerEntry::new(kind, bonus));
+        }
         CloseResult { id: pos.id, pnl: pnl.to_string(), fee: U128(fee), exit: U128(exit), reason: reason.into() }
+    }
+
+    /// Bonus turnover: count this closed position's wager (if held long enough), unlock the bonus
+    /// once the turnover is reached, or end it when the balance is gone.
+    fn track_promo(&self, pos: &Position, acct: &mut Account) -> Option<(&'static str, u128)> {
+        if acct.promo_wager_required.0 == 0 {
+            return None;
+        }
+        let held = env::block_timestamp().saturating_sub(pos.opened_at) / NANOS;
+        if held >= self.config.promo_min_hold_sec {
+            acct.promo_wagered = U128(acct.promo_wagered.0 + pos.wager.0);
+        }
+        let open_wagers: u128 = acct.position_ids.iter().filter_map(|id| self.positions.get(id)).map(|p| p.wager.0).sum();
+        let kind = if acct.promo_wagered.0 >= acct.promo_wager_required.0 {
+            Some("promo_unlocked")
+        } else if acct.balance.0 + open_wagers < self.config.min_wager.0 {
+            Some("promo_ended")
+        } else {
+            None
+        };
+        let kind = kind?;
+        let bonus = acct.promo_bonus.0;
+        acct.promo_bonus = U128(0);
+        acct.promo_wager_required = U128(0);
+        Some((kind, bonus))
     }
 
     fn send_usdc(&mut self, to: AccountId, amount: u128) -> Promise {
