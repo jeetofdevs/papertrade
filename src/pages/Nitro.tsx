@@ -12,7 +12,7 @@ const POINTS_PER_100 = 1;
 const SUPPLY = Number(import.meta.env.VITE_NITRO_SUPPLY ?? 1_000_000_000);
 const POINTS_SHARE = Number(import.meta.env.VITE_NITRO_POINTS_SHARE ?? 0.1);
 const POINTS_POOL = SUPPLY * POINTS_SHARE;
-const MCAPS = [5_000, 100_000, 1_000_000, 2_400_000];
+const MCAPS = [5_000, 100_000, 1_000_000, 10_000_000];
 /** Used for the estimate until real points exist. */
 const EXAMPLE_TOTAL_POINTS = 1_000_000;
 
