@@ -35,7 +35,6 @@ Optional variables (Settings → Variables), read at build time:
 | --- | --- | --- |
 | `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` or `testnet` |
 | `VITE_CONTRACT_ID` | _(empty)_ | The Nitro Pool contract (also the pool's deposit address). The pool card stays off until it is set |
-| `VITE_KEEPER_URL` | _(empty)_ | Public URL of the keeper service. Enables "paste a transaction hash" for plain transfers |
 | `VITE_NEAR_RPC` | `https://free.rpc.fastnear.com` | NEAR RPC used for reads |
 | `VITE_ORDERLY_BROKER_ID` | _(empty)_ | Your Orderly broker (builder) ID. Live mode stays off until it is set |
 | `VITE_NIA_IMAGE` | _(empty)_ | Optional custom mascot illustration (for example `/nia.png` placed in `public/`) |
@@ -60,11 +59,12 @@ Nitro pool behind Live trades.
 `contract/` is a NEAR smart contract that holds the pool. The contract account is the pool's deposit address,
 and every user's balance is the sum of their transactions with it:
 
-- **Deposit button** (Profile → Nitro Pool account): one `ft_transfer_call` from the user's NEAR wallet,
-  credited by the contract immediately.
-- **Plain transfer to the pool address** (wallet app, exchange): the keeper sees the USDC transfer and credits
-  the sender, or the NEAR account written in the memo. Each transfer is credited once, and the contract refuses
-  to credit more than the USDC it holds but does not already owe.
+- **Deposit** (Profile → Nitro Pool account): the user signs one contract call (`ft_transfer_call`) from their
+  NEAR wallet. The USDC moves to the pool wallet and the contract adds it to that user's balance immediately.
+- Plain USDC transfers to the pool address are not part of the normal flow. As a safety net, the keeper still
+  credits them to the sender (or the account in the memo), once each and never beyond unassigned USDC.
+- The pool wallet is whatever account the contract is deployed to. Deploy it to your own NEAR account if you want
+  deposits to land in that wallet; the contract still decides who owns which balance.
 - Winners are paid from the vault, losers' wagers go to the vault (and earn NITRO). Each open position reserves
   its maximum payout. The owner can pause, tune limits and collect fees, but cannot move user balances.
 
