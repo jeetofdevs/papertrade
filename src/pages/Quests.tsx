@@ -49,7 +49,7 @@ export function Quests() {
     const err = dispatch((s) => claimQuest(s, traderId, QUEST_PREFIX + q.id, q.periodKey, q.reward));
     if (err) return toast.err(err);
     sound.win();
-    toast.ok(`+${q.reward.toLocaleString('en-US')} NITRO for “${q.title}”`);
+    toast.ok(`+${q.reward.toLocaleString('en-US')} quest reward for “${q.title}”`);
   };
   const claimAll = () => ready.forEach(claim);
 
@@ -143,11 +143,11 @@ export function Quests() {
             <b className="mono">${compact(volume30d)}</b>
           </div>
           <div>
-            <span className="label">Your NITRO</span>
-            <b className="mono accent">{compact(acct.nitro)}</b>
+            <span className="label">NITRO points (on chain)</span>
+            <b className="mono accent">{compact(pool.nitro)}</b>
           </div>
           <div>
-            <span className="label">Ready to claim</span>
+            <span className="label" title="Quest rewards are kept in this browser for now, separate from on-chain NITRO points">Quest rewards ready</span>
             <b className="mono">{compact(claimable)}</b>
           </div>
           <button className="btn btn-primary" disabled={!ready.length} onClick={claimAll}>

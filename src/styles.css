@@ -3853,3 +3853,16 @@ html.uwuless .chart-scene .sky-comet {
 .promo-steps li.done::before { content: '✓'; background: var(--mint); color: #03130d; }
 .promo-steps li > span:first-of-type { flex: 1; }
 .promo-handle { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 13px; }
+
+/* ---------- NITRO conversion ---------- */
+.convert { display: grid; gap: 16px; margin-bottom: 16px; }
+.convert-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.convert-head h2 { margin: 4px 0 0; font-size: 22px; }
+.convert-status { padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; color: var(--amber); background: rgba(255, 181, 71, 0.12); border: 1px solid rgba(255, 181, 71, 0.35); }
+.convert-status.on { color: var(--mint); background: rgba(0, 236, 151, 0.12); border-color: rgba(0, 236, 151, 0.4); }
+.convert-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.convert-box { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.convert-arrow { font-size: 22px; color: var(--mint); }
+.convert-out { font-size: 22px; }
+.convert-notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 640px) { .convert-grid { grid-template-columns: 1fr; } .convert-arrow { justify-self: center; transform: rotate(90deg); } }

@@ -195,6 +195,8 @@ export interface LedgerItem {
     | 'promo_bonus'
     | 'promo_unlocked'
     | 'promo_ended'
+    | 'nitro_convert'
+    | 'nitro_refund'
     | 'refund'
     | 'vault_deposit'
     | 'vault_withdraw'
@@ -557,6 +559,38 @@ export async function loadLeaderboard(): Promise<LeaderRow[]> {
   }
   return rows;
 }
+
+export interface NitroStats {
+  totalMinted: number;
+  totalConverted: number;
+  token: string | null;
+  /** $NITRO tokens per NITRO point, in whole tokens (decimals applied when known). */
+  tokensPerPointRaw: string;
+  open: boolean;
+}
+
+/** Network-wide NITRO numbers from the contract (real USDC losses only). */
+export async function loadNitroStats(): Promise<NitroStats> {
+  const n = await view<{ total_minted: string; total_converted: string; conversion: { token: string | null; tokens_per_point: string; open: boolean } }>(
+    POOL_ID,
+    'get_nitro',
+  );
+  return {
+    totalMinted: fromUsdc(n.total_minted),
+    totalConverted: fromUsdc(n.total_converted),
+    token: n.conversion.token,
+    tokensPerPointRaw: n.conversion.tokens_per_point,
+    open: n.conversion.open,
+  };
+}
+
+/** Token decimals from its NEP-148 metadata. */
+export async function tokenDecimals(token: string): Promise<number> {
+  return (await view<{ decimals: number }>(token, 'ft_metadata')).decimals;
+}
+
+/** Convert NITRO points to $NITRO; attaches 0.00125 NEAR so the token can register the user. */
+export const convertNitroAction = (points: number) => call('convert_nitro', { points: toUsdc(points) }, 60, '1250000000000000000000');
 
 export const loadPromo = async () => toPromo(await view<RawPromo>(POOL_ID, 'get_promo'));
 

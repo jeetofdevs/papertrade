@@ -95,8 +95,8 @@ export function ProfileMenu() {
               <b className="mono">{usd(acct.usdc)}</b>
             </div>
             <div>
-              <span className="label">NITRO</span>
-              <b className="mono accent">{compact(acct.nitro)}</b>
+              <span className="label">NITRO points</span>
+              <b className="mono accent">{compact(pool.nitro)}</b>
             </div>
             <div>
               <span className="label">Realised PnL</span>

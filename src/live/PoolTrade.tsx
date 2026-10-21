@@ -292,6 +292,8 @@ const KIND_LABEL: Record<LedgerItem['kind'], string> = {
   promo_bonus: 'Bonus',
   promo_unlocked: 'Bonus unlocked',
   promo_ended: 'Bonus ended',
+  nitro_convert: 'NITRO → $NITRO',
+  nitro_refund: 'NITRO refunded',
   refund: 'Refund',
   vault_deposit: 'Vault deposit',
   vault_withdraw: 'Vault withdraw',

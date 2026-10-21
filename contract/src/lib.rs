@@ -105,6 +105,25 @@ pub struct UserStats {
     pub nitro: U128,
 }
 
+/// NITRO points → $NITRO token conversion, set by the owner at token launch.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct NitroConversion {
+    /// The $NITRO token contract (NEP-141). Conversion stays closed until it is set.
+    pub token: Option<AccountId>,
+    /// Token base units paid per 1 NITRO point (points have 6 decimals).
+    pub tokens_per_point: U128,
+    pub open: bool,
+}
+
+#[near(serializers = [json])]
+pub struct NitroView {
+    /// NITRO points minted from real USDC losses, all time.
+    pub total_minted: U128,
+    pub total_converted: U128,
+    pub conversion: NitroConversion,
+}
+
 #[near(serializers = [json])]
 pub struct PromoView {
     pub amount: U128,
@@ -263,6 +282,9 @@ pub struct Contract {
     promo_claims: u32,
     /// Every account that has used the contract, in order of first use.
     users: Vector<AccountId>,
+    nitro_minted: u128,
+    nitro_converted: u128,
+    nitro_conversion: NitroConversion,
 }
 
 fn mul_div(a: u128, b: u128, c: u128) -> u128 {
@@ -316,6 +338,9 @@ impl Contract {
             promo_budget: 300_000_000, // 100 bonuses of 3 USDC
             promo_claims: 0,
             users: Vector::new(b"u"),
+            nitro_minted: 0,
+            nitro_converted: 0,
+            nitro_conversion: NitroConversion { token: None, tokens_per_point: U128(0), open: false },
         }
     }
 
@@ -407,6 +432,62 @@ impl Contract {
                 UserStats { account: id.clone(), volume: a.volume, profit: a.profit, loss: a.loss, trades: a.trades, nitro: a.nitro }
             })
             .collect()
+    }
+
+    pub fn get_nitro(&self) -> NitroView {
+        NitroView {
+            total_minted: U128(self.nitro_minted),
+            total_converted: U128(self.nitro_converted),
+            conversion: self.nitro_conversion.clone(),
+        }
+    }
+
+    /// Owner: configure the $NITRO token conversion (at token launch). The contract must hold enough
+    /// $NITRO tokens to pay conversions; the owner sends them to this account.
+    pub fn set_nitro_conversion(&mut self, token: Option<AccountId>, tokens_per_point: U128, open: bool) {
+        self.assert_owner();
+        require!(!open || (token.is_some() && tokens_per_point.0 > 0), "Set the token and rate before opening");
+        self.nitro_conversion = NitroConversion { token, tokens_per_point, open };
+    }
+
+    /// Convert NITRO points into $NITRO tokens. Attach 0.00125 NEAR so the token can register you;
+    /// if the transfer fails the points come back.
+    #[payable]
+    pub fn convert_nitro(&mut self, points: U128) -> Promise {
+        let conv = self.nitro_conversion.clone();
+        require!(conv.open, "Conversion opens at the $NITRO token launch");
+        let token = conv.token.expect("No token set");
+        let who = env::predecessor_account_id();
+        let mut acct = self.account(&who);
+        require!(points.0 > 0 && points.0 <= acct.nitro.0, "Not enough NITRO points");
+        let amount = points.0.checked_mul(conv.tokens_per_point.0).expect("overflow") / 1_000_000;
+        require!(amount > 0, "Amount too small");
+        acct.nitro = U128(acct.nitro.0 - points.0);
+        self.accounts.insert(who.clone(), acct);
+        self.nitro_converted += points.0;
+        let mut e = LedgerEntry::new("nitro_convert", 0);
+        e.nitro = Some(points);
+        e.reason = Some(amount.to_string());
+        self.log(&who, e);
+        let register = format!("{{\"account_id\":\"{}\",\"registration_only\":true}}", who);
+        let transfer = format!("{{\"receiver_id\":\"{}\",\"amount\":\"{}\",\"memo\":\"NITRO conversion\"}}", who, amount);
+        Promise::new(token.clone())
+            .function_call("storage_deposit".to_string(), register.into_bytes(), env::attached_deposit(), Gas::from_tgas(10))
+            .then(Promise::new(token).function_call("ft_transfer".to_string(), transfer.into_bytes(), NearToken::from_yoctonear(1), Gas::from_tgas(15)))
+            .then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(10)).on_convert(who, points))
+    }
+
+    #[private]
+    pub fn on_convert(&mut self, account: AccountId, points: U128, #[callback_result] result: Result<(), PromiseError>) {
+        if result.is_err() {
+            let mut acct = self.account_or_default(&account);
+            acct.nitro = U128(acct.nitro.0 + points.0);
+            self.accounts.insert(account.clone(), acct);
+            self.nitro_converted -= points.0;
+            let mut e = LedgerEntry::new("nitro_refund", 0);
+            e.nitro = Some(points);
+            self.log(&account, e);
+        }
     }
 
     pub fn get_promo(&self) -> PromoView {
@@ -905,6 +986,7 @@ impl Contract {
             payout = wager - loss;
             minted = loss * self.config.nitro_per_usdc as u128;
             acct.nitro = U128(acct.nitro.0 + minted);
+            self.nitro_minted += minted;
             acct.loss = U128(acct.loss.0 + loss);
         } else {
             let profit = pnl as u128;

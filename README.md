@@ -95,6 +95,11 @@ are in `set_config`; set `promo_amount` to 0 to stop the promo.
 The profile and the leaderboard only use real USDC stats from the contract (`get_users_stats`); demo trades
 are never counted.
 
+**NITRO points and $NITRO.** Every USDC lost on a real trade earns 10 NITRO points on chain (`get_account`,
+total in `get_nitro`); demo trades never count. At token launch the owner sends $NITRO tokens to the contract
+account and calls `set_nitro_conversion(token, tokens_per_point, true)` (`tokens_per_point` in token base units
+per point; points have 6 decimals). Users then convert on the **$NITRO** page; failed transfers refund points.
+
 **Withdrawals are reviewed.** Users request a withdrawal (the amount is locked and they can cancel); the
 owner approves on the website's **Admin** page (USDC is sent) or rejects with a reason (the amount returns).
 
