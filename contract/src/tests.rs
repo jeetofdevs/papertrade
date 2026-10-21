@@ -675,3 +675,18 @@ fn conversion_needs_token_and_rate() {
     t.as_("owner.near");
     t.c.set_nitro_conversion(None, U128(0), true);
 }
+
+#[test]
+#[should_panic(expected = "Deposit above the maximum")]
+fn deposits_above_1000_are_refused() {
+    let mut t = setup();
+    t.as_("usdc.near");
+    let _ = t.c.ft_on_transfer(acc("bob.near"), U128(1_001 * USDC), "".into());
+}
+
+#[test]
+fn a_1000_deposit_is_fine() {
+    let mut t = setup();
+    t.deposit("bob.near", 1_000, "");
+    assert_eq!(t.balance("bob.near"), 1_000 * USDC);
+}

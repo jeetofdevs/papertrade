@@ -19,6 +19,8 @@ const USDC = 1_000_000;
 const PRICE = 100_000_000;
 const TGAS = '000000000000';
 const POLL_MS = 8_000;
+/** Largest single deposit, in USDC (the contract enforces its own configured value). */
+export const MAX_DEPOSIT = 1_000;
 /** Config, vault, owner, promo and requests change rarely: refresh them every this many polls. */
 const SLOW_EVERY = 5;
 
@@ -172,6 +174,7 @@ interface RawConfig {
   profit_fee_bps: number;
   spread_bps: number;
   min_deposit: string;
+  max_deposit?: string;
 }
 interface RawVault {
   liquidity: string;
@@ -216,6 +219,8 @@ export interface PoolConfig {
   profitFee: number;
   spread: number;
   minDeposit: number;
+  /** Largest single deposit in USDC (0 = no limit). */
+  maxDeposit: number;
 }
 
 export interface PoolState {
@@ -261,7 +266,7 @@ const EMPTY: PoolState = {
   totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
   positions: [],
   ledger: [],
-  config: { maxLeverage: 1000, minWager: 1, maxPositionShare: 0.02, maxProfitMultiple: 10, profitFee: 0.1, spread: 0, minDeposit: 1 },
+  config: { maxLeverage: 1000, minWager: 1, maxPositionShare: 0.02, maxProfitMultiple: 10, profitFee: 0.1, spread: 0, minDeposit: 1, maxDeposit: MAX_DEPOSIT },
   vault: { liquidity: 0, free: 0 },
 };
 
@@ -428,6 +433,7 @@ async function load() {
         profitFee: config.profit_fee_bps / 10_000,
         spread: (config.spread_bps ?? 0) / 10_000,
         minDeposit: fromUsdc(config.min_deposit ?? '1000000'),
+        maxDeposit: config.max_deposit != null ? fromUsdc(config.max_deposit) : MAX_DEPOSIT,
       },
       vault: { liquidity: fromUsdc(vault.liquidity), free: fromUsdc(vault.free) },
     });

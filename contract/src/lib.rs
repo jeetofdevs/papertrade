@@ -49,6 +49,8 @@ pub struct Config {
     pub spread_bps: u32,
     /// Smallest trading deposit, in USDC base units.
     pub min_deposit: U128,
+    /// Largest single trading deposit, in USDC base units (0 = no limit).
+    pub max_deposit: U128,
     /// New-user bonus credited by `claim_promo` (0 turns the promo off).
     pub promo_amount: U128,
     /// Deposits needed before the bonus can be claimed.
@@ -313,6 +315,7 @@ impl Contract {
                 markets: vec!["NEAR".into(), "BTC".into(), "ETH".into(), "SOL".into()],
                 spread_bps: 0,
                 min_deposit: U128(1_000_000),
+                max_deposit: U128(1_000_000_000),
                 promo_amount: U128(3_000_000),
                 promo_min_deposit: U128(2_000_000),
                 promo_wager_multiple: 20,
@@ -355,6 +358,7 @@ impl Contract {
         match msg.as_str() {
             "" | "trade" => {
                 require!(amount >= self.config.min_deposit.0, "Deposit below the minimum");
+                require!(self.config.max_deposit.0 == 0 || amount <= self.config.max_deposit.0, "Deposit above the maximum");
                 acct.balance = U128(acct.balance.0 + amount);
                 acct.total_deposited = U128(acct.total_deposited.0 + amount);
                 self.log(&sender_id, LedgerEntry::new("deposit", amount));

@@ -5,6 +5,7 @@ import {
   cancelWithdrawAction,
   depositAction,
   earlyDeposits,
+  MAX_DEPOSIT,
   POOL_ID,
   poolCanReceiveUsdc,
   preLaunchDepositActions,
@@ -34,10 +35,11 @@ export function PoolAccountCard() {
   const n = Number(amount);
   const max = tab === 'deposit' ? pool.wallet : pool.balance;
   const tooSmall = tab === 'deposit' && n > 0 && n < pool.config.minDeposit;
+  const tooBig = tab === 'deposit' && pool.config.maxDeposit > 0 && n > pool.config.maxDeposit;
   const locked = tab === 'withdraw' && pool.userPromo.locked;
   // If the wallet balance could not be read, let the wallet itself refuse an amount that is too high.
   const withinMax = tab === 'deposit' && !pool.walletKnown ? true : n <= max;
-  const valid = n > 0 && withinMax && !tooSmall && !locked;
+  const valid = n > 0 && withinMax && !tooSmall && !tooBig && !locked;
 
   const submit = async () => {
     if (!valid) return;
@@ -117,7 +119,7 @@ export function PoolAccountCard() {
         </div>
         <div className="input">
           <input id="pool-amt" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} />
-          <button className="chip" onClick={() => setAmount(String(Math.floor(max * 1e6) / 1e6))}>
+          <button className="chip" onClick={() => setAmount(String(Math.floor(Math.min(max, tab === 'deposit' && pool.config.maxDeposit > 0 ? pool.config.maxDeposit : Infinity) * 1e6) / 1e6))}>
             Max
           </button>
           <span className="unit">USDC</span>
@@ -126,6 +128,7 @@ export function PoolAccountCard() {
           {busy ? 'Confirm in your wallet…' : tab === 'deposit' ? 'Deposit USDC' : 'Request withdrawal'}
         </button>
         {tooSmall && <p className="hint err">Minimum deposit is {usd(pool.config.minDeposit)} USDC.</p>}
+        {tooBig && <p className="hint err">Maximum deposit is {usd(pool.config.maxDeposit, 0)} USDC per transaction.</p>}
         {locked && <p className="hint err">Withdrawals are locked until your bonus turnover is done.</p>}
         <p className="muted small">
           {tab === 'deposit'
@@ -152,7 +155,7 @@ function EarlyDepositCard() {
   }, [accountId]);
 
   const n = Number(amount);
-  const valid = !!accountId && n >= 1 && (!pool.walletKnown || n <= pool.wallet);
+  const valid = !!accountId && n >= 1 && n <= MAX_DEPOSIT && (!pool.walletKnown || n <= pool.wallet);
   const reason = !accountId
     ? 'Connect your NEAR wallet first.'
     : pool.walletKnown && pool.wallet <= 0
@@ -161,7 +164,9 @@ function EarlyDepositCard() {
         ? `You only have ${usd(pool.wallet)} USDC in this wallet.`
         : n > 0 && n < 1
           ? 'Minimum deposit is 1 USDC.'
-          : null;
+          : n > MAX_DEPOSIT
+            ? `Maximum deposit is ${usd(MAX_DEPOSIT, 0)} USDC per transaction.`
+            : null;
   const total = list.reduce((s, d) => s + d.amount, 0);
 
   const submit = async () => {
@@ -198,12 +203,12 @@ function EarlyDepositCard() {
         <div className="field-head">
           <label htmlFor="early-amt">Amount to deposit</label>
           <span className="muted">
-            Max <b className="mono">{usd(pool.wallet)}</b> USDC
+            Max <b className="mono">{usd(Math.min(pool.wallet, MAX_DEPOSIT))}</b> USDC
           </span>
         </div>
         <div className="input">
           <input id="early-amt" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} />
-          <button className="chip" onClick={() => setAmount(String(Math.floor(pool.wallet * 1e6) / 1e6))}>
+          <button className="chip" onClick={() => setAmount(String(Math.floor(Math.min(pool.wallet, MAX_DEPOSIT) * 1e6) / 1e6))}>
             Max
           </button>
           <span className="unit">USDC</span>

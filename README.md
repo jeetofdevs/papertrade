@@ -43,7 +43,7 @@ Optional variables (Settings → Variables), read at build time:
 Switch the header toggle to **Live** to trade real USDC against the Nitro pool contract (default
 `nitroonnear.near`, override with `VITE_CONTRACT_ID`).
 
-- **Deposit:** enter an amount and press Deposit. The user signs one contract call from their NEAR wallet
+- **Deposit:** 1 to 1,000 USDC per transaction (`min_deposit` / `max_deposit` in `set_config`). Enter an amount and press Deposit. The user signs one contract call from their NEAR wallet
   (`ft_transfer_call` on USDC) and the contract adds it to their trading balance.
 - **Trade:** open and close call the contract directly with a slippage limit the trader picks (0.1–2%).
   The owner can also set a spread with `set_config`. Wallets that support it sign trades without a popup.
