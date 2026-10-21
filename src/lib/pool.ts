@@ -69,7 +69,47 @@ interface RawAccount {
   loss: string;
   trades: number;
   pending_withdraw?: string;
+  promo_claimed?: boolean;
+  promo_bonus?: string;
+  promo_wager_required?: string;
+  promo_wagered?: string;
 }
+interface RawPromo {
+  amount: string;
+  min_deposit: string;
+  wager_multiple: number;
+  min_hold_sec: number;
+  budget: string;
+  claims: number;
+  active: boolean;
+}
+export interface Promo {
+  amount: number;
+  minDeposit: number;
+  multiple: number;
+  minHoldSec: number;
+  budget: number;
+  claims: number;
+  /** Bonuses can still be claimed. */
+  open: boolean;
+}
+export interface UserPromo {
+  claimed: boolean;
+  /** A bonus is active and withdrawals are locked until the turnover is reached. */
+  locked: boolean;
+  bonus: number;
+  required: number;
+  wagered: number;
+}
+const toPromo = (p: RawPromo): Promo => ({
+  amount: fromUsdc(p.amount),
+  minDeposit: fromUsdc(p.min_deposit),
+  multiple: p.wager_multiple,
+  minHoldSec: p.min_hold_sec,
+  budget: fromUsdc(p.budget),
+  claims: p.claims,
+  open: p.active,
+});
 interface RawRequest {
   id: number;
   account: string;
@@ -131,6 +171,10 @@ export interface LedgerItem {
     | 'withdraw'
     | 'withdraw_rejected'
     | 'withdraw_cancelled'
+    | 'promo_bonus'
+    | 'promo_unlocked'
+    | 'promo_ended'
+    | 'promo_fund'
     | 'refund'
     | 'vault_deposit'
     | 'vault_withdraw'
@@ -172,6 +216,8 @@ export interface PoolState {
   requests: WithdrawRequest[];
   /** The contract owner, who reviews withdrawals. */
   owner: string | null;
+  promo: Promo | null;
+  userPromo: UserPromo;
   nitro: number;
   /** USDC in the user's NEAR wallet. */
   wallet: number;
@@ -190,6 +236,8 @@ const EMPTY: PoolState = {
   pendingWithdraw: 0,
   requests: [],
   owner: null,
+  promo: null,
+  userPromo: { claimed: false, locked: false, bonus: 0, required: 0, wagered: 0 },
   nitro: 0,
   wallet: 0,
   totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
@@ -274,7 +322,7 @@ async function load() {
   const id = account;
   if (!id || !POOL_AVAILABLE) return;
   try {
-    const [a, positions, ledger, config, vault, wallet, requests, owner] = await Promise.all([
+    const [a, positions, ledger, config, vault, wallet, requests, owner, promo] = await Promise.all([
       view<RawAccount>(POOL_ID, 'get_account', { account_id: id }),
       view<RawPosition[]>(POOL_ID, 'get_positions', { account_id: id }),
       view<RawEntry[]>(POOL_ID, 'get_ledger', { account_id: id, from_index: 0, limit: 100 }),
@@ -283,6 +331,7 @@ async function load() {
       view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).catch(() => '0'),
       view<RawRequest[]>(POOL_ID, 'get_withdraw_requests', { from_index: 0, limit: 200 }).catch(() => [] as RawRequest[]),
       view<string>(POOL_ID, 'get_owner').catch(() => null),
+      view<RawPromo>(POOL_ID, 'get_promo').catch(() => null),
     ]);
     if (id !== account) return;
     const items = ledger.map(toItem);
@@ -306,6 +355,14 @@ async function load() {
       pendingWithdraw: fromUsdc(a.pending_withdraw ?? '0'),
       requests: requests.filter((r) => r.account === id).map(toRequest),
       owner,
+      promo: promo ? toPromo(promo) : null,
+      userPromo: {
+        claimed: !!a.promo_claimed,
+        locked: fromUsdc(a.promo_wager_required ?? '0') > 0,
+        bonus: fromUsdc(a.promo_bonus ?? '0'),
+        required: fromUsdc(a.promo_wager_required ?? '0'),
+        wagered: fromUsdc(a.promo_wagered ?? '0'),
+      },
       nitro: fromUsdc(a.nitro),
       wallet: fromUsdc(wallet),
       totals: {
@@ -406,6 +463,37 @@ export const requestWithdrawAction = (usd: number) => call('request_withdraw', {
 export const cancelWithdrawAction = (id: number) => call('cancel_withdraw', { id }, 30);
 export const approveWithdrawAction = (id: number) => call('approve_withdraw', { id }, 60);
 export const rejectWithdrawAction = (id: number, reason: string) => call('reject_withdraw', { id, reason: reason || null }, 30);
+
+export const claimPromoAction = () => call('claim_promo', {}, 30);
+/** Owner: add USDC to the bonus budget (sent from the owner's wallet). */
+export const fundPromoAction = (usd: number): WalletAction =>
+  call('ft_transfer_call', { receiver_id: POOL_ID, amount: toUsdc(usd), msg: 'promo' }, 100, '1');
+
+export interface LeaderRow {
+  account: string;
+  pnl: number;
+  volume: number;
+  trades: number;
+  nitro: number;
+}
+
+/** Every user's real stats from the contract, for the leaderboard. */
+export async function loadLeaderboard(): Promise<LeaderRow[]> {
+  const rows: LeaderRow[] = [];
+  for (let from = 0; from < 5_000; from += 200) {
+    const page = await view<Array<{ account: string; volume: string; profit: string; loss: string; trades: number; nitro: string }>>(POOL_ID, 'get_users_stats', {
+      from_index: from,
+      limit: 200,
+    });
+    for (const u of page) {
+      rows.push({ account: u.account, pnl: fromUsdc(u.profit) - fromUsdc(u.loss), volume: fromUsdc(u.volume), trades: u.trades, nitro: fromUsdc(u.nitro) });
+    }
+    if (page.length < 200) break;
+  }
+  return rows;
+}
+
+export const loadPromo = async () => toPromo(await view<RawPromo>(POOL_ID, 'get_promo'));
 
 /** Every withdrawal request waiting for review (owner view). */
 export async function loadAllRequests(): Promise<WithdrawRequest[]> {

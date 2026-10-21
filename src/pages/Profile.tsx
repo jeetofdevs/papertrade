@@ -9,7 +9,6 @@ import { account, Trade } from '../lib/engine';
 import { compact, price, signed, signedUsd, usd } from '../lib/format';
 import { tradesFromLedger, usePool } from '../lib/pool';
 import { profileStats } from '../lib/profile';
-import { useSettings } from '../lib/settings';
 import { FundsModal, LedgerTable } from '../live/PoolTrade';
 import { useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
@@ -46,14 +45,21 @@ function PnlChart({ history }: { history: Trade[] }) {
 export function Profile() {
   const { accountId, traderId } = useWallet();
   const state = useStore();
-  const { mode } = useSettings();
-  const live = mode === 'live';
+  // Only real USDC trades count here; demo trades never show on the profile.
+  const live = true;
   const pool = usePool();
-  const demoAcct = account(state, traderId);
-  // Live mode shows the real account from the pool contract; demo mode the local demo account.
-  const acct = live
-    ? { ...demoAcct, usdc: pool.balance, nitro: pool.nitro, positions: pool.positions, history: tradesFromLedger(pool.ledger), pendingProfit: 0, lpShares: 0, realizedPnl: pool.totals.profit - pool.totals.loss, volume: pool.totals.volume }
-    : demoAcct;
+  const base = account(state, traderId);
+  const acct = {
+    ...base,
+    usdc: pool.balance,
+    nitro: pool.nitro,
+    positions: pool.positions,
+    history: tradesFromLedger(pool.ledger),
+    pendingProfit: 0,
+    lpShares: 0,
+    realizedPnl: pool.totals.profit - pool.totals.loss,
+    volume: pool.totals.volume,
+  };
   const st = profileStats(state, acct);
   const [funds, setFunds] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -112,13 +118,13 @@ export function Profile() {
             <button className="chip" onClick={() => setEditing(true)}>
               Edit profile
             </button>
-            <span className="chip">{live ? 'Live · real USDC' : 'Demo account'}</span>
+            <span className="chip">Real USDC stats · demo trades not counted</span>
             {st.favourite && <span className="chip">Favourite: {st.favourite}-PERP</span>}
           </div>
         </div>
         <div className="profile-equity">
-          <span className="label">{live ? 'USDC balance' : 'Demo equity'}</span>
-          <b className="mono">${usd(live ? pool.balance : st.equity)}</b>
+          <span className="label">USDC balance</span>
+          <b className="mono">${usd(pool.balance)}</b>
           {live && (
             <button className="btn btn-sm btn-primary" onClick={() => setFunds(true)}>
               Deposit / withdraw

@@ -3831,3 +3831,19 @@ html.uwuless .chart-scene .sky-comet {
 .admin-total { display: grid; justify-items: end; gap: 2px; }
 .admin-total b { font-size: 22px; }
 .admin-reason { width: 160px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 13px; }
+
+/* ---------- Promo ---------- */
+.promo { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(0, 236, 151, 0.4); background: linear-gradient(135deg, rgba(0, 236, 151, 0.14), rgba(201, 184, 255, 0.08)); }
+.promo p { margin: 0; }
+.promo-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.promo-badge { font-weight: 800; color: var(--mint); }
+.promo-active { border-color: rgba(255, 181, 71, 0.45); background: linear-gradient(135deg, rgba(255, 181, 71, 0.12), rgba(0, 236, 151, 0.06)); }
+.promo-active .promo-badge { color: var(--amber); }
+.promo-compact { padding: 10px 12px; }
+.tag.ledger-promo_bonus, .tag.ledger-promo_unlocked { color: var(--mint); background: rgba(0, 236, 151, 0.12); }
+.tag.ledger-promo_ended, .tag.ledger-promo_fund { color: var(--muted); background: var(--panel-2); }
+.admin-promo { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.admin-promo h3 { margin: 0 0 4px; }
+.admin-promo p { margin: 0; }
+.admin-fund { display: flex; gap: 8px; align-items: center; }
+.admin-fund .input { width: 180px; }

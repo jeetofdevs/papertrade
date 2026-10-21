@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { usd } from '../lib/format';
 import { cancelWithdrawAction, depositAction, POOL_ID, refreshPool, requestWithdrawAction, USDC_ID, usePool } from '../lib/pool';
 import { useWallet } from '../lib/wallet';
+import { PromoCard } from './PromoCard';
 import { toast } from './Toasts';
 
 type Tab = 'deposit' | 'withdraw';
@@ -27,7 +28,8 @@ export function PoolAccountCard() {
   const n = Number(amount);
   const max = tab === 'deposit' ? pool.wallet : pool.balance;
   const tooSmall = tab === 'deposit' && n > 0 && n < pool.config.minDeposit;
-  const valid = n > 0 && n <= max && !tooSmall;
+  const locked = tab === 'withdraw' && pool.userPromo.locked;
+  const valid = n > 0 && n <= max && !tooSmall && !locked;
 
   const submit = async () => {
     if (!valid) return;
@@ -61,6 +63,7 @@ export function PoolAccountCard() {
   return (
     <section className="panel pad pool-card" id="pool">
       <h2>USDC balance</h2>
+      <PromoCard />
 
       <div className="pool-balances">
         <div>
@@ -115,6 +118,7 @@ export function PoolAccountCard() {
           {busy ? 'Confirm in your wallet…' : tab === 'deposit' ? 'Deposit USDC' : 'Request withdrawal'}
         </button>
         {tooSmall && <p className="hint err">Minimum deposit is {usd(pool.config.minDeposit)} USDC.</p>}
+        {locked && <p className="hint err">Withdrawals are locked until your bonus turnover is done.</p>}
         <p className="muted small">
           {tab === 'deposit'
             ? 'Confirm one transaction in your NEAR wallet. Your trading balance updates as soon as it lands.'

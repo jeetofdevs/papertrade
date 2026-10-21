@@ -5,6 +5,10 @@ import { toast } from '../components/Toasts';
 import { usd } from '../lib/format';
 import {
   approveWithdrawAction,
+  fundPromoAction,
+  loadPromo,
+  Promo,
+  USDC_ID,
   loadAllRequests,
   loadUserSummary,
   POOL_ID,
@@ -29,12 +33,15 @@ export function Admin() {
   const [busy, setBusy] = useState<number | null>(null);
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [promo, setPromo] = useState<Promo | null>(null);
+  const [fund, setFund] = useState('');
 
   const load = useCallback(async () => {
     try {
       const [o, list] = await Promise.all([view<string>(POOL_ID, 'get_owner'), loadAllRequests()]);
       setOwner(o);
       setRequests(list);
+      loadPromo().then(setPromo).catch(() => {});
       setError(null);
       const names = [...new Set(list.map((r) => r.account))];
       const sums = await Promise.all(names.map((n) => loadUserSummary(n).catch(() => null)));
@@ -77,6 +84,22 @@ export function Admin() {
 
   const total = (requests ?? []).reduce((s, r) => s + r.amount, 0);
 
+  const addFunds = async () => {
+    const n = Number(fund);
+    if (!(n > 0)) return;
+    setBusy(-1);
+    try {
+      await signAndSend(USDC_ID, [fundPromoAction(n)]);
+      toast.ok(`Added ${usd(n)} USDC to the promo budget`);
+      setFund('');
+      await load();
+    } catch (e) {
+      toast.err((e as Error).message || 'Transaction cancelled');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="page">
       <section className="panel pad admin-head">
@@ -92,6 +115,26 @@ export function Admin() {
         </div>
       </section>
       {error && <p className="hint err">Could not load requests: {error}</p>}
+
+      <section className="panel pad admin-promo">
+        <div>
+          <h3>New-user bonus</h3>
+          <p className="muted small">
+            {promo
+              ? `${usd(promo.amount)} USDC after a ${usd(promo.minDeposit)} USDC deposit, ${promo.multiple}x turnover. ${promo.claims} claimed · budget left ${usd(promo.budget)} USDC (${Math.floor(promo.budget / (promo.amount || 1))} bonuses).`
+              : 'Loading…'}
+          </p>
+        </div>
+        <div className="admin-fund">
+          <div className="input">
+            <input inputMode="decimal" placeholder="Amount" value={fund} onChange={(e) => setFund(e.target.value.replace(/[^0-9.]/g, ''))} />
+            <span className="unit">USDC</span>
+          </div>
+          <button className="btn btn-primary" disabled={!(Number(fund) > 0) || busy === -1} onClick={addFunds}>
+            Fund promo
+          </button>
+        </div>
+      </section>
 
       <div className="panel">
         <div className="table-wrap">

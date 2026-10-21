@@ -6,6 +6,7 @@ import { Chart } from '../components/Chart';
 import { confirmDialog } from '../components/Confirm';
 import { MARKET_NAME } from '../components/MarketBar';
 import { PoolAccountCard } from '../components/PoolAccountCard';
+import { PromoCard } from '../components/PromoCard';
 import { ShareCard, ShareData } from '../components/ShareCard';
 import { toast } from '../components/Toasts';
 import { TokenIcon } from '../components/TokenIcon';
@@ -138,6 +139,8 @@ function PoolOrderPanel({ market }: { market: Market }) {
         </div>
       </div>
       {childproof && <span className="childproof-badge">Childproof on · every trade asks to confirm</span>}
+
+      <PromoCard compact />
 
       <div className="live-balance">
         <div>
@@ -286,6 +289,10 @@ const KIND_LABEL: Record<LedgerItem['kind'], string> = {
   withdraw: 'Withdrawn',
   withdraw_rejected: 'Withdraw rejected',
   withdraw_cancelled: 'Withdraw cancelled',
+  promo_bonus: 'Bonus',
+  promo_unlocked: 'Bonus unlocked',
+  promo_ended: 'Bonus ended',
+  promo_fund: 'Promo funded',
   refund: 'Refund',
   vault_deposit: 'Vault deposit',
   vault_withdraw: 'Vault withdraw',
@@ -328,8 +335,8 @@ export function LedgerTable({ items, limit = 100 }: { items: LedgerItem[]; limit
                 <span className="muted">USDC</span>
               )}
             </td>
-            <td className={`mono ${e.kind === 'deposit' || e.kind === 'refund' ? 'up' : e.kind === 'withdraw' ? 'down' : ''}`}>
-              {e.kind === 'deposit' || e.kind === 'refund' ? '+' : e.kind === 'withdraw' ? '−' : ''}
+            <td className={`mono ${e.kind === 'deposit' || e.kind === 'refund' || e.kind === 'promo_bonus' ? 'up' : e.kind === 'withdraw' ? 'down' : ''}`}>
+              {e.kind === 'deposit' || e.kind === 'refund' || e.kind === 'promo_bonus' ? '+' : e.kind === 'withdraw' ? '−' : ''}
               {usd(e.amount)}
               {e.kind === 'withdraw_rejected' && e.reason && <span className="muted small ledger-note"> · {e.reason}</span>}
             </td>

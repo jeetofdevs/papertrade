@@ -85,6 +85,15 @@ contract on USDC. Running it again is safe; an existing contract is only replace
 To deploy by hand instead: `cd contract && cargo near build non-reproducible-wasm`, then
 `cd keeper && NEAR_PRIVATE_KEY=... KEEPER_SEED=... node deploy.mjs`.
 
+**New-user bonus.** After depositing at least 2 USDC a user can claim a 3 USDC bonus once. Withdrawals stay
+locked until their wagers (positions held 60 s or longer) reach 20x the bonus, 60 USDC; the bonus ends if the
+balance runs out. Bonuses are paid from a promo budget the owner funds on the Admin page (USDC with msg
+`"promo"`), so they never touch user balances or the vault. Amount, minimum deposit, multiple and hold time
+are in `set_config`; set `promo_amount` to 0 to stop the promo.
+
+The profile and the leaderboard only use real USDC stats from the contract (`get_users_stats`); demo trades
+are never counted.
+
 **Withdrawals are reviewed.** Users request a withdrawal (the amount is locked and they can cancel); the
 owner approves on the website's **Admin** page (USDC is sent) or rejects with a reason (the amount returns).
 

@@ -50,11 +50,12 @@ export function App() {
   const { mode } = useSettings();
   const pool = usePool();
 
-  // Live mode reads the user's balance, positions and history from the pool contract.
+  // The user's real balance, positions and history come from the pool contract.
   useEffect(() => {
     // Test builds (VITE_ALLOW_GUEST) also load the guest account, so the screens can be checked without a wallet.
-    watchPool(mode === 'live' ? accountId ?? (ALLOW_GUEST ? traderId : null) : null);
-  }, [mode, accountId, traderId]);
+    // Always loaded: the profile and leaderboard show real stats in both modes.
+    watchPool(accountId ?? (ALLOW_GUEST ? traderId : null));
+  }, [accountId, traderId]);
 
   useEffect(() => {
     startPrices();
