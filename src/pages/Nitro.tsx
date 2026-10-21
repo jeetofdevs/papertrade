@@ -7,6 +7,13 @@ import { useWallet } from '../lib/wallet';
 import { Stat } from './Earn';
 
 const NITRO_PER_USDC = 10;
+/** $NITRO total supply and the share of it set aside for NITRO points (split pro rata at conversion). */
+const SUPPLY = Number(import.meta.env.VITE_NITRO_SUPPLY ?? 1_000_000_000);
+const POINTS_SHARE = Number(import.meta.env.VITE_NITRO_POINTS_SHARE ?? 0.1);
+const POINTS_POOL = SUPPLY * POINTS_SHARE;
+const MCAPS = [5_000, 100_000, 1_000_000, 2_400_000];
+/** Used for the estimate until real points exist. */
+const EXAMPLE_TOTAL_POINTS = 1_000_000;
 
 /** NITRO points (earned on real USDC losses only) and their conversion to the $NITRO token. */
 export function Nitro() {
@@ -16,6 +23,7 @@ export function Nitro() {
   const [decimals, setDecimals] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
+  const [mcap, setMcap] = useState(5_000);
 
   useEffect(() => {
     let live = true;
@@ -81,6 +89,32 @@ export function Nitro() {
         <Stat label="Converted to $NITRO" value={compact(stats?.totalConverted ?? 0)} />
       </div>
 
+      <section className="panel pad points-rules">
+        <div>
+          <span className="eyebrow">Rules</span>
+          <h2>How NITRO points work</h2>
+        </div>
+        <ul className="rules-list">
+          <li>
+            <b>Earn:</b> {NITRO_PER_USDC} NITRO points for every 1 USDC lost on a real USDC trade (max loss or a losing close). Wins, demo trades
+            and the display-only bonus earn none.
+          </li>
+          <li>
+            <b>Points pool:</b> {(POINTS_SHARE * 100).toFixed(0)}% of the {compact(SUPPLY)} $NITRO supply ({compact(POINTS_POOL)} $NITRO) is
+            reserved for NITRO points.
+          </li>
+          <li>
+            <b>Convert:</b> at launch the pool is split pro rata. Rate = {compact(POINTS_POOL)} $NITRO ÷ all points earned. The fewer points in
+            total, the more $NITRO each point gets.
+          </li>
+          <li>
+            <b>Value:</b> $NITRO price = market cap ÷ {compact(SUPPLY)}. At a ${usd(5_000, 0)} launch market cap that is ${(5_000 / SUPPLY).toFixed(6)} per
+            token.
+          </li>
+        </ul>
+        <PointsEstimator mine={mine} total={total} mcap={mcap} setMcap={setMcap} />
+      </section>
+
       <section className="panel pad convert">
         <div className="convert-head">
           <div>
@@ -136,6 +170,56 @@ export function Nitro() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: number; mcap: number; setMcap: (n: number) => void }) {
+  const realTotal = total > 0;
+  const totalPoints = realTotal ? total : EXAMPLE_TOTAL_POINTS;
+  const tokensPerPoint = POINTS_POOL / totalPoints;
+  const tokenPrice = mcap / SUPPLY;
+  const pointValue = tokensPerPoint * tokenPrice;
+  const perDollarLost = pointValue * NITRO_PER_USDC;
+  return (
+    <div className="estimator">
+      <div className="field-head">
+        <span className="label">Estimate at a $NITRO market cap of</span>
+      </div>
+      <div className="row-chips">
+        {MCAPS.map((m) => (
+          <button key={m} className={`chip ${mcap === m ? 'chip-on' : ''}`} onClick={() => setMcap(m)}>
+            ${compact(m)}
+          </button>
+        ))}
+      </div>
+      <dl className="summary">
+        <div>
+          <dt>$NITRO price</dt>
+          <dd className="mono">${tokenPrice < 0.0001 ? tokenPrice.toFixed(7) : tokenPrice.toFixed(5)}</dd>
+        </div>
+        <div>
+          <dt>{realTotal ? 'Points earned so far' : 'Example total points'}</dt>
+          <dd className="mono">{compact(totalPoints)}</dd>
+        </div>
+        <div>
+          <dt>$NITRO per point</dt>
+          <dd className="mono">{compact(tokensPerPoint)}</dd>
+        </div>
+        <div>
+          <dt>Value per 1 USDC lost</dt>
+          <dd className="mono accent">${perDollarLost < 0.01 ? perDollarLost.toFixed(4) : usd(perDollarLost)}</dd>
+        </div>
+        <div>
+          <dt>Your points now worth</dt>
+          <dd className="mono">
+            {compact(mine * tokensPerPoint)} $NITRO ≈ ${usd(mine * pointValue)}
+          </dd>
+        </div>
+      </dl>
+      <p className="muted small">
+        Estimates only: the final rate is set at launch from the real total of points, and the market sets the price.
+      </p>
     </div>
   );
 }
