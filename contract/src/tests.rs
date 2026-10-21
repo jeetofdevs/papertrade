@@ -26,6 +26,11 @@ impl T {
     fn new() -> Self {
         let mut t = T { c: Contract::new(acc("owner.near"), acc("usdc.near"), acc("oracle.near")), now: 1_000 * NANOS };
         t.as_("owner.near");
+        // Exact-number tests run without slippage; slippage has its own tests.
+        let mut c = t.c.get_config();
+        c.slippage_base_ppm = 0;
+        c.slippage_impact_ppm = 0;
+        t.c.set_config(c);
         t
     }
     fn as_(&mut self, who: &str) -> &mut Self {
@@ -484,23 +489,6 @@ fn promo_setup() -> T {
 }
 
 #[test]
-fn bonus_needs_a_deposit_and_is_claimed_once() {
-    let mut t = promo_setup();
-    assert_eq!(t.c.get_promo().budget.0, 300 * USDC);
-    t.as_("bob.near");
-    assert_eq!(t.c.claim_promo("bob_x".into()).0, 3 * USDC);
-    let a = t.c.get_account(acc("bob.near"));
-    assert_eq!(a.balance.0, 5 * USDC);
-    assert_eq!(a.promo_wager_required.0, 60 * USDC);
-    assert_eq!(t.c.get_promo().budget.0, 297 * USDC);
-    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_bonus");
-    // Paid from the vault; no USDC came in, so the books still balance.
-    assert_eq!(t.c.get_vault().liquidity.0, (1_000_000 - 3) * USDC);
-    assert_eq!(t.c.get_pool().accounted.0, (1_000_000 + 1_000 + 2) * USDC);
-    assert_eq!(t.c.get_account(acc("bob.near")).x_handle.as_deref(), Some("bob_x"));
-}
-
-#[test]
 #[should_panic(expected = "already claimed")]
 fn bonus_only_once() {
     let mut t = promo_setup();
@@ -552,60 +540,6 @@ fn x_username_accepts_the_at_sign() {
     t.as_("bob.near");
     t.c.claim_promo(" @Bob_X ".into());
     assert_eq!(t.c.get_account(acc("bob.near")).x_handle.as_deref(), Some("Bob_X"));
-}
-
-#[test]
-#[should_panic(expected = "bonus is still locked")]
-fn withdrawals_locked_until_turnover() {
-    let mut t = promo_setup();
-    t.as_("bob.near");
-    t.c.claim_promo("bob_x".into());
-    t.c.request_withdraw(U128(USDC));
-}
-
-#[test]
-fn turnover_unlocks_withdrawals_and_quick_flips_do_not_count() {
-    let mut t = promo_setup();
-    t.deposit("bob.near", 100, "");
-    t.as_("bob.near");
-    t.c.claim_promo("bob_x".into());
-    // Opened and closed within the same minute: does not count.
-    let id = t.c.open_position("NEAR".into(), true, U128(50 * USDC), 1, None, None);
-    t.later(10);
-    t.price("NEAR", 3 * P);
-    t.as_("bob.near");
-    t.c.close_position(id, None);
-    assert_eq!(t.c.get_account(acc("bob.near")).promo_wagered.0, 0);
-    // Held for over a minute: counts. Two of them reach $60.
-    for _ in 0..2 {
-        t.as_("bob.near");
-        let id = t.c.open_position("NEAR".into(), true, U128(30 * USDC), 1, None, None);
-        t.later(61);
-        t.price("NEAR", 3 * P);
-        t.as_("bob.near");
-        t.c.close_position(id, None);
-    }
-    let a = t.c.get_account(acc("bob.near"));
-    assert_eq!(a.promo_wager_required.0, 0);
-    assert_eq!(a.promo_bonus.0, 0);
-    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_unlocked");
-    t.c.request_withdraw(U128(USDC)); // unlocked
-}
-
-#[test]
-fn bonus_ends_when_the_balance_is_gone() {
-    let mut t = promo_setup();
-    t.as_("bob.near");
-    t.c.claim_promo("bob_x".into());
-    let id = t.c.open_position("NEAR".into(), true, U128(5 * USDC), 1000, None, None);
-    t.later(5);
-    t.price("NEAR", 2 * P);
-    t.as_("keeper.near");
-    t.c.run_keeper(vec![id]);
-    let a = t.c.get_account(acc("bob.near"));
-    assert_eq!(a.balance.0, 0);
-    assert_eq!(a.promo_wager_required.0, 0);
-    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_ended");
 }
 
 #[test]
@@ -751,4 +685,108 @@ fn settling_near_with_usdc_backs_the_balances() {
     let n = t.c.get_near();
     assert_eq!(n.unbacked_usdc.0, 0);
     assert_eq!(t.c.get_vault().liquidity.0, 1_000_002 * USDC); // the extra $2 went to the vault
+}
+
+#[test]
+fn bonus_is_display_only_until_the_turnover() {
+    let mut t = promo_setup();
+    let vault_before = t.c.get_vault().liquidity.0;
+    t.as_("bob.near");
+    assert_eq!(t.c.claim_promo("bob_x".into()).0, 3 * USDC);
+    let a = t.c.get_account(acc("bob.near"));
+    assert_eq!(a.balance.0, 2 * USDC); // real balance untouched
+    assert_eq!(a.promo_bonus.0, 3 * USDC);
+    assert_eq!(a.promo_wager_required.0, 60 * USDC);
+    assert_eq!(t.c.get_vault().liquidity.0, vault_before); // no USDC moved
+    assert_eq!(t.c.get_promo().budget.0, 297 * USDC);
+    // The real balance can still be withdrawn.
+    t.c.request_withdraw(U128(2 * USDC));
+}
+
+#[test]
+fn bonus_trades_use_the_bonus_and_unlock_after_turnover() {
+    let mut t = promo_setup();
+    t.deposit("bob.near", 100, "");
+    t.as_("bob.near");
+    t.c.claim_promo("bob_x".into());
+    // A $3 trade is paid from the bonus; it wins +$3 at 10x on +10%.
+    let id = t.c.open_position("NEAR".into(), true, U128(3 * USDC), 10, None, None);
+    assert_eq!(t.balance("bob.near"), 102 * USDC);
+    t.later(61);
+    t.price("NEAR", 3_300_000_00);
+    t.as_("bob.near");
+    t.c.close_position(id, None);
+    let a = t.c.get_account(acc("bob.near"));
+    // 3 bonus + 3 profit - 0.30 fee stays in the bonus (real part 2.70).
+    assert_eq!(a.promo_bonus.0, 5_700_000);
+    assert_eq!(a.promo_backed.0, 2_700_000);
+    assert_eq!(a.balance.0, 102 * USDC);
+    // Real trades count toward the turnover too: $57 held over a minute reaches $60.
+    t.as_("bob.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(57 * USDC), 1, None, None);
+    t.later(61);
+    t.price("NEAR", 3_300_000_00);
+    t.as_("bob.near");
+    let vault = t.c.get_vault().liquidity.0;
+    t.c.close_position(id, None);
+    let a = t.c.get_account(acc("bob.near"));
+    assert_eq!(a.promo_bonus.0, 0);
+    assert_eq!(a.promo_wager_required.0, 0);
+    assert_eq!(a.balance.0, 102 * USDC + 5_700_000);
+    // The vault paid only the display-only $3 at unlock.
+    assert_eq!(t.c.get_vault().liquidity.0, vault - 3 * USDC);
+    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_unlocked");
+}
+
+#[test]
+fn losing_the_bonus_costs_the_vault_nothing() {
+    let mut t = promo_setup();
+    t.as_("bob.near");
+    t.c.claim_promo("bob_x".into());
+    let vault = t.c.get_vault().liquidity.0;
+    let id = t.c.open_position("NEAR".into(), true, U128(3 * USDC), 1000, None, None);
+    t.later(5);
+    t.price("NEAR", 2 * P);
+    t.as_("keeper.near");
+    t.c.run_keeper(vec![id]);
+    let a = t.c.get_account(acc("bob.near"));
+    assert_eq!(a.promo_bonus.0, 0);
+    assert_eq!(a.promo_wager_required.0, 0);
+    assert_eq!(a.nitro.0, 0); // display-only losses earn no NITRO
+    assert_eq!(a.balance.0, 2 * USDC);
+    assert_eq!(t.c.get_vault().liquidity.0, vault); // nothing gained, nothing paid
+    assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_ended");
+}
+
+#[test]
+fn quick_flips_do_not_count_toward_the_turnover() {
+    let mut t = promo_setup();
+    t.deposit("bob.near", 100, "");
+    t.as_("bob.near");
+    t.c.claim_promo("bob_x".into());
+    let id = t.c.open_position("NEAR".into(), true, U128(50 * USDC), 1, None, None);
+    t.later(10);
+    t.price("NEAR", 3 * P);
+    t.as_("bob.near");
+    t.c.close_position(id, None);
+    assert_eq!(t.c.get_account(acc("bob.near")).promo_wagered.0, 0);
+}
+
+#[test]
+fn slippage_grows_with_size() {
+    let mut t = setup();
+    t.as_("owner.near");
+    let mut c = t.c.get_config();
+    c.slippage_base_ppm = 50; // 0.005%
+    c.slippage_impact_ppm = 200; // +0.02% at the largest size
+    t.c.set_config(c);
+    t.as_("alice.near");
+    // Small: $10 x 10 = $100 of a $20,000 max size.
+    let small = t.c.open_position("NEAR".into(), true, U128(10 * USDC), 10, None, None);
+    let e1 = t.c.get_position(small).unwrap().entry.0;
+    assert_eq!(e1, mul_div(3 * P, 1_000_000 + 50 + 1, 1_000_000));
+    // Largest: $200 x 100 = $20,000 → 250 ppm.
+    let big = t.c.open_position("NEAR".into(), false, U128(200 * USDC), 100, None, None);
+    let e2 = t.c.get_position(big).unwrap().entry.0;
+    assert_eq!(e2, mul_div(3 * P, 1_000_000 - 250, 1_000_000));
 }

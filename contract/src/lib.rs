@@ -51,6 +51,10 @@ pub struct Config {
     pub min_deposit: U128,
     /// Largest single trading deposit, in USDC base units (0 = no limit).
     pub max_deposit: U128,
+    /// Slippage on opens and closes, in parts per million: a base amount plus price impact that
+    /// grows with the position size (reaching `slippage_impact_ppm` at the largest allowed size).
+    pub slippage_base_ppm: u32,
+    pub slippage_impact_ppm: u32,
     /// New-user bonus credited by `claim_promo` (0 turns the promo off).
     pub promo_amount: U128,
     /// Deposits needed before the bonus can be claimed.
@@ -87,8 +91,10 @@ pub struct Account {
     pub pending_withdraw: U128,
     /// The new-user bonus was claimed (once per account).
     pub promo_claimed: bool,
-    /// Bonus still under its turnover requirement (0 = no active bonus).
+    /// Bonus balance, usable for trading only (not withdrawable) until the turnover is reached.
+    /// Part of it is display-only credit; `promo_backed` is the part that is real USDC won with it.
     pub promo_bonus: U128,
+    pub promo_backed: U128,
     /// Wagers still needed before withdrawals unlock, and wagers counted so far.
     pub promo_wager_required: U128,
     pub promo_wagered: U128,
@@ -209,6 +215,9 @@ pub struct Position {
     /// Vault funds reserved for this position's maximum payout.
     pub reserved: U128,
     pub opened_at: u64,
+    /// Bonus-funded part of the wager: virtual (display-only) USDC and real USDC won with the bonus.
+    pub bonus_virtual: U128,
+    pub bonus_backed: U128,
 }
 
 #[near(serializers = [json])]
@@ -339,6 +348,8 @@ impl Contract {
                 spread_bps: 0,
                 min_deposit: U128(1_000_000),
                 max_deposit: U128(1_000_000_000),
+                slippage_base_ppm: 50,
+                slippage_impact_ppm: 200,
                 promo_amount: U128(3_000_000),
                 promo_min_deposit: U128(2_000_000),
                 promo_wager_multiple: 20,
@@ -440,15 +451,13 @@ impl Contract {
         require!(!acct.promo_claimed, "You already claimed the bonus");
         require!(acct.total_deposited.0 >= self.config.promo_min_deposit.0, "Deposit the minimum first to claim the bonus");
         require!(self.promo_budget >= amount, "The promo is fully claimed");
-        require!(self.liquidity - self.reserved >= amount, "The vault cannot pay bonuses right now");
         self.promo_budget -= amount;
         self.promo_claims += 1;
-        // Paid from the vault: USDC already in the contract, so the books stay balanced.
-        self.liquidity -= amount;
+        // Display-only credit: no USDC moves now. The vault pays it only when the turnover is reached.
         acct.x_handle = Some(handle.clone());
-        acct.balance = U128(acct.balance.0 + amount);
         acct.promo_claimed = true;
         acct.promo_bonus = U128(amount);
+        acct.promo_backed = U128(0);
         acct.promo_wager_required = U128(amount * self.config.promo_wager_multiple as u128);
         acct.promo_wagered = U128(0);
         self.accounts.insert(who.clone(), acct);
@@ -555,7 +564,6 @@ impl Contract {
         let who = env::predecessor_account_id();
         let mut acct = self.account(&who);
         require!(amount.0 > 0 && amount.0 <= acct.balance.0, "Not enough free balance");
-        require!(acct.promo_wager_required.0 == 0, "Your bonus is still locked: reach the trading turnover first");
         let open = self.withdraw_requests.values().filter(|r| r.account == who).count();
         require!(open < 5, "You already have 5 withdrawals waiting for review");
         acct.balance = U128(acct.balance.0 - amount.0);
@@ -781,12 +789,14 @@ impl Contract {
         let mut acct = self.account(&who);
         let wager = wager.0;
         require!(wager >= self.config.min_wager.0, "Wager below minimum");
-        require!(wager <= acct.balance.0, "Not enough free balance");
+        // A bonus pays for the wager when it covers it; otherwise the real balance does.
+        let from_bonus = acct.promo_wager_required.0 > 0 && acct.promo_bonus.0 >= wager;
+        require!(from_bonus || wager <= acct.balance.0, "Not enough free balance");
         require!((acct.position_ids.len() as u32) < self.config.max_open_positions, "Too many open positions");
 
         let size = wager * leverage as u128;
         require!(size <= mul_div(self.liquidity, self.config.max_position_bps as u128, BPS), "Position too large for the vault");
-        let entry = self.with_spread(self.fresh_price(&market), long);
+        let entry = self.with_slippage(self.with_spread(self.fresh_price(&market), long), long, size);
         if let Some(limit) = acceptable_price {
             require!(if long { entry <= limit.0 } else { entry >= limit.0 }, "Price moved beyond your slippage limit");
         }
@@ -819,8 +829,21 @@ impl Contract {
             tp,
             reserved: U128(reserve),
             opened_at: env::block_timestamp(),
+            bonus_virtual: U128(0),
+            bonus_backed: U128(0),
         };
-        acct.balance = U128(acct.balance.0 - wager);
+        let mut pos = pos;
+        if from_bonus {
+            // Real winnings in the bonus are used last, display-only credit first.
+            let virtual_part = (acct.promo_bonus.0 - acct.promo_backed.0).min(wager);
+            let backed_part = wager - virtual_part;
+            acct.promo_bonus = U128(acct.promo_bonus.0 - wager);
+            acct.promo_backed = U128(acct.promo_backed.0 - backed_part);
+            pos.bonus_virtual = U128(virtual_part);
+            pos.bonus_backed = U128(backed_part);
+        } else {
+            acct.balance = U128(acct.balance.0 - wager);
+        }
         acct.position_ids.push(id);
         acct.volume = U128(acct.volume.0 + size);
         let mut e = LedgerEntry::new("open", wager);
@@ -853,7 +876,7 @@ impl Contract {
         } else if Self::crossed_tp(&pos, mark) {
             (pos.tp.unwrap().0, "take_profit")
         } else {
-            let exit = self.with_spread(mark, !pos.long);
+            let exit = self.with_slippage(self.with_spread(mark, !pos.long), !pos.long, pos.wager.0 * pos.leverage as u128);
             if let Some(limit) = acceptable_price {
                 require!(if pos.long { exit >= limit.0 } else { exit <= limit.0 }, "Price moved beyond your slippage limit");
             }
@@ -955,6 +978,7 @@ impl Contract {
         require!(config.max_leverage >= 1 && config.max_profit_multiple >= 1, "Bad config");
         require!(config.profit_fee_bps <= 5000 && config.max_position_bps <= 2000, "Limits too high");
         require!(config.spread_bps <= 100, "Spread too high");
+        require!(config.slippage_base_ppm <= 10_000 && config.slippage_impact_ppm <= 10_000, "Slippage too high");
         self.config = config;
     }
 
@@ -1040,6 +1064,17 @@ impl Contract {
         self.ledger.insert(who.clone(), list);
     }
 
+    /// Price after slippage: a base amount plus price impact proportional to the position size.
+    fn slippage_ppm(&self, size: u128) -> u128 {
+        let max_size = mul_div(self.liquidity.max(1), self.config.max_position_bps as u128, BPS).max(1);
+        self.config.slippage_base_ppm as u128 + mul_div(self.config.slippage_impact_ppm as u128, size.min(max_size), max_size)
+    }
+
+    fn with_slippage(&self, price: u128, buy: bool, size: u128) -> u128 {
+        let ppm = self.slippage_ppm(size);
+        if buy { mul_div(price, 1_000_000 + ppm, 1_000_000) } else { mul_div(price, 1_000_000 - ppm, 1_000_000) }
+    }
+
     /// Price after the spread: buying pays a little more, selling gets a little less.
     fn with_spread(&self, mark: u128, buy: bool) -> u128 {
         let s = self.config.spread_bps as u128;
@@ -1099,14 +1134,22 @@ impl Contract {
         let mut fee = 0u128;
         let mut minted = 0u128;
         let payout;
+        let bonus = pos.bonus_virtual.0 + pos.bonus_backed.0 > 0;
         if pnl < 0 {
             let loss = (-pnl) as u128;
-            self.liquidity += loss;
+            // Display-only bonus credit is lost first; only real USDC losses reach the vault and earn NITRO.
+            let lost_virtual = loss.min(pos.bonus_virtual.0);
+            let real_loss = loss - lost_virtual;
+            self.liquidity += real_loss;
             payout = wager - loss;
-            minted = loss * self.config.nitro_per_usdc as u128;
+            minted = real_loss * self.config.nitro_per_usdc as u128;
             acct.nitro = U128(acct.nitro.0 + minted);
             self.nitro_minted += minted;
-            acct.loss = U128(acct.loss.0 + loss);
+            acct.loss = U128(acct.loss.0 + real_loss);
+            if bonus {
+                acct.promo_bonus = U128(acct.promo_bonus.0 + payout);
+                acct.promo_backed = U128(acct.promo_backed.0 + pos.bonus_backed.0 - real_loss);
+            }
         } else {
             let profit = pnl as u128;
             fee = mul_div(profit, self.config.profit_fee_bps as u128, BPS);
@@ -1115,8 +1158,15 @@ impl Contract {
             self.fees += fee;
             payout = wager + profit - fee;
             acct.profit = U128(acct.profit.0 + profit - fee);
+            if bonus {
+                // Winnings made with the bonus are real USDC but stay in the bonus until the turnover.
+                acct.promo_bonus = U128(acct.promo_bonus.0 + payout);
+                acct.promo_backed = U128(acct.promo_backed.0 + pos.bonus_backed.0 + profit - fee);
+            }
         }
-        acct.balance = U128(acct.balance.0 + payout);
+        if !bonus {
+            acct.balance = U128(acct.balance.0 + payout);
+        }
         acct.trades += 1;
         let mut e = LedgerEntry::new("close", payout);
         e.position_id = Some(pos.id);
@@ -1147,7 +1197,7 @@ impl Contract {
 
     /// Bonus turnover: count this closed position's wager (if held long enough), unlock the bonus
     /// once the turnover is reached, or end it when the balance is gone.
-    fn track_promo(&self, pos: &Position, acct: &mut Account) -> Option<(&'static str, u128)> {
+    fn track_promo(&mut self, pos: &Position, acct: &mut Account) -> Option<(&'static str, u128)> {
         if acct.promo_wager_required.0 == 0 {
             return None;
         }
@@ -1155,19 +1205,36 @@ impl Contract {
         if held >= self.config.promo_min_hold_sec {
             acct.promo_wagered = U128(acct.promo_wagered.0 + pos.wager.0);
         }
-        let open_wagers: u128 = acct.position_ids.iter().filter_map(|id| self.positions.get(id)).map(|p| p.wager.0).sum();
-        let kind = if acct.promo_wagered.0 >= acct.promo_wager_required.0 {
-            Some("promo_unlocked")
-        } else if acct.balance.0 + open_wagers < self.config.min_wager.0 {
-            Some("promo_ended")
-        } else {
-            None
-        };
-        let kind = kind?;
+        let open_bonus: u128 = acct
+            .position_ids
+            .iter()
+            .filter_map(|id| self.positions.get(id))
+            .map(|p| p.bonus_virtual.0 + p.bonus_backed.0)
+            .sum();
+        if open_bonus > 0 {
+            return None; // settle bonus positions first
+        }
         let bonus = acct.promo_bonus.0;
-        acct.promo_bonus = U128(0);
-        acct.promo_wager_required = U128(0);
-        Some((kind, bonus))
+        let virtual_part = bonus - acct.promo_backed.0;
+        if acct.promo_wagered.0 >= acct.promo_wager_required.0 && self.liquidity - self.reserved >= virtual_part {
+            // Turnover reached: the bonus becomes real, withdrawable USDC. The vault now pays the
+            // display-only part; the rest is USDC already won with it.
+            self.liquidity -= virtual_part;
+            acct.balance = U128(acct.balance.0 + bonus);
+            acct.promo_bonus = U128(0);
+            acct.promo_backed = U128(0);
+            acct.promo_wager_required = U128(0);
+            return Some(("promo_unlocked", bonus));
+        }
+        if bonus < self.config.min_wager.0 {
+            // Bonus used up: whatever real USDC is left in it (less than the minimum wager) goes to the vault.
+            self.liquidity += acct.promo_backed.0;
+            acct.promo_bonus = U128(0);
+            acct.promo_backed = U128(0);
+            acct.promo_wager_required = U128(0);
+            return Some(("promo_ended", bonus));
+        }
+        None
     }
 
     fn send_usdc(&mut self, to: AccountId, amount: u128) -> Promise {
