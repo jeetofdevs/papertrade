@@ -3907,3 +3907,13 @@ html.uwuless .chart-scene .sky-comet {
 .rules-list b { color: var(--text); }
 .estimator { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
 .estimator p { margin: 0; }
+
+/* ---------- $NITRO CA ---------- */
+.token-ca { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(0, 236, 151, 0.35); background: rgba(0, 236, 151, 0.07); max-width: 100%; }
+.token-ca-label { font: 800 11px var(--mono); letter-spacing: 1px; color: var(--mint); text-transform: uppercase; }
+.token-ca code { font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.token-ca .chip { padding: 4px 10px; font-size: 12px; }
+.token-ca-compact { padding: 6px 8px; gap: 6px; }
+.token-ca-compact code { font-size: 12px; }
+.foot2-brand .token-ca { margin-top: 10px; }
+.hero2-copy .token-ca, .hero .token-ca { margin-top: 12px; }

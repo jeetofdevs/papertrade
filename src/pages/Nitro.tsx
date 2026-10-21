@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LogoMark } from '../components/Logo';
+import { TokenCA } from '../components/TokenCA';
 import { toast } from '../components/Toasts';
 import { compact, usd } from '../lib/format';
 import { convertNitroAction, loadNitroStats, NitroStats, POOL_ID, refreshPool, tokenDecimals, usePool } from '../lib/pool';
@@ -78,9 +79,10 @@ export function Nitro() {
           <h1>Trade the size. Earn the fuel.</h1>
           <p>
             Every <b>$100 of position size</b> (wager × leverage) on a real USDC trade earns <b>{POINTS_PER_100} NITRO point</b>, win or lose,
-            recorded on chain in the Nitro contract. Demo trades never count. When the <b>$NITRO</b> token launches, points convert into tokens
-            here.
+            recorded on chain in the Nitro contract. Demo trades never count. Points convert into the <b>$NITRO</b> token here once conversion
+            opens.
           </p>
+          <TokenCA />
         </div>
       </section>
 

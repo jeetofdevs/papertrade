@@ -3,6 +3,7 @@ import { LogoMark } from '../components/Logo';
 import { TokenIcon } from '../components/TokenIcon';
 import { useActivity } from '../lib/activity';
 import { FAUCET_AMOUNT, Market, MARKETS, MAX_LEVERAGE } from '../lib/engine';
+import { TokenCA } from '../components/TokenCA';
 import { compact, pct, price, usd } from '../lib/format';
 import { getTicks, loadTicks, Point, usePrices } from '../lib/prices';
 import { useWallet } from '../lib/wallet';
@@ -218,6 +219,7 @@ export function Landing() {
               How it works
             </a>
           </div>
+          <TokenCA compact />
           <div className="hero3-proof">
             <div>
               <b className="mono">${compact(marketVol)}</b>
