@@ -31,7 +31,6 @@ export interface MarketStats {
 
 /** Market trades at or above this size show up in the ticker. */
 export const WHALE_USD = 25_000;
-const DAY = 24 * 60 * 60 * 1000;
 
 let feed: Activity[] = [];
 const listeners = new Set<() => void>();
@@ -79,17 +78,9 @@ function nitroStats(state: State, marketVolumes: Partial<Record<Market, number>>
   const out = Object.fromEntries(
     MARKETS.map((m) => [m, { marketVolume24h: marketVolumes[m] ?? 0, volume24h: 0, longOi: 0, shortOi: 0 }]),
   ) as Record<Market, MarketStats>;
-  for (const acct of Object.values(state.accounts)) {
-    for (const p of acct.positions) {
-      const s = out[p.market];
-      if (p.side === 'long') s.longOi += p.size;
-      else s.shortOi += p.size;
-      if (now - p.openedAt < DAY) s.volume24h += p.size;
-    }
-    for (const t of acct.history) {
-      if (now - t.closedAt < DAY) out[t.market].volume24h += t.size;
-    }
-  }
+  // Demo trades live only in this browser and are never counted as Nitro activity.
+  void state;
+  void now;
   return out;
 }
 

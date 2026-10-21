@@ -3,6 +3,7 @@ import { LogoMark } from '../components/Logo';
 import { TokenIcon } from '../components/TokenIcon';
 import { useActivity } from '../lib/activity';
 import { FAUCET_AMOUNT, Market, MARKETS, MAX_LEVERAGE } from '../lib/engine';
+import { loadNetworkStats } from '../lib/pool';
 import { compact, pct, price, usd } from '../lib/format';
 import { getTicks, loadTicks, Point, usePrices } from '../lib/prices';
 import { useWallet } from '../lib/wallet';
@@ -186,8 +187,15 @@ export function Landing() {
   }, []);
 
   const marketVol = MARKETS.reduce((s, m) => s + stats[m].marketVolume24h, 0);
-  const vol = MARKETS.reduce((s, m) => s + stats[m].volume24h, 0);
-  const oi = MARKETS.reduce((s, m) => s + stats[m].longOi + stats[m].shortOi, 0);
+  // Real Nitro numbers from the contract only (0 until real trades happen).
+  const [net, setNet] = useState({ volume: 0, openInterest: 0 });
+  useEffect(() => {
+    loadNetworkStats()
+      .then(setNet)
+      .catch(() => {});
+  }, []);
+  const vol = net.volume;
+  const oi = net.openInterest;
   const cta = ready ? 'Connect wallet' : 'Loading wallets…';
 
   return (
@@ -268,7 +276,7 @@ export function Landing() {
       <section className="lp-stats">
         {[
           ['Market volume 24h', `$${compact(marketVol)}`],
-          ['Nitro volume 24h', `$${compact(vol)}`],
+          ['Nitro volume (all time)', `$${compact(vol)}`],
           ['Nitro open interest', `$${compact(oi)}`],
           ['Max leverage', `${MAX_LEVERAGE}x`],
         ].map(([l, v]) => (

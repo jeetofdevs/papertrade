@@ -70,14 +70,6 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
           <b className="mono">${compact(st.marketVolume24h)}</b>
         </div>
         <div>
-          <span className="label" title="Open long positions on Nitro">Nitro long OI</span>
-          <b className="mono up">${compact(st.longOi)}</b>
-        </div>
-        <div>
-          <span className="label" title="Open short positions on Nitro">Nitro short OI</span>
-          <b className="mono down">${compact(st.shortOi)}</b>
-        </div>
-        <div>
           <span className="label">Max leverage</span>
           <b className="mono accent">{maxLev}x</b>
         </div>

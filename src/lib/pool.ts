@@ -185,6 +185,7 @@ interface RawConfig {
 interface RawVault {
   liquidity: string;
   free: string;
+  open_interest?: string;
 }
 
 export interface LedgerItem {
@@ -730,6 +731,12 @@ export async function tokenDecimals(token: string): Promise<number> {
 
 /** Convert NITRO points to $NITRO; attaches 0.00125 NEAR so the token can register the user. */
 export const convertNitroAction = (points: number) => call('convert_nitro', { points: toUsdc(points) }, 60, '1250000000000000000000');
+
+/** Real, network-wide Nitro numbers from the contract: all-time volume and current open interest. */
+export async function loadNetworkStats(): Promise<{ volume: number; openInterest: number }> {
+  const [rows, vault] = await Promise.all([loadLeaderboard(), view<RawVault>(POOL_ID, 'get_vault')]);
+  return { volume: rows.reduce((s, r) => s + r.volume, 0), openInterest: fromUsdc(vault.open_interest ?? '0') };
+}
 
 export const loadPromo = async () => toPromo(await view<RawPromo>(POOL_ID, 'get_promo'));
 
