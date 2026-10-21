@@ -11,9 +11,9 @@ on:
         default: nitroonnear.near
         required: true
       owner:
-        description: Owner account that reviews withdrawals (empty = the contract account)
-        default: ''
-        required: false
+        description: Admin (owner) account that reviews withdrawals and funds the promo
+        default: nitroonnear.near
+        required: true
       upgrade:
         description: Replace the code of an already deployed contract (only when its storage layout is unchanged)
         type: boolean

@@ -75,8 +75,9 @@ Launch with small limits (`set_config`) until the contract has been audited. Ora
 2. GitHub → Settings → Secrets and variables → Actions → add:
    - `NEAR_PRIVATE_KEY`: a full access key of `nitroonnear.near` (`ed25519:...`, exported from your wallet)
    - `KEEPER_SEED`: any long random phrase (at least 16 characters). The keeper uses the same phrase.
-3. GitHub → Actions → **Deploy NEAR contract** → Run workflow. Optionally set the owner (the account that
-   reviews withdrawals; empty = `nitroonnear.near`).
+3. GitHub → Actions → **Deploy NEAR contract** → Run workflow. The admin (owner) defaults to
+   `nitroonnear.near`: sign in to the website with that wallet to see the **Admin** page. The owner can hand
+   the role to another account later with `set_owner`.
 
 The workflow tests and builds the contract, deploys and initialises it (first run only), adds a limited
 keeper key that can only call `push_prices`, `run_keeper` and `credit_transfers`, and registers the

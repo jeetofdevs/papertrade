@@ -9,7 +9,7 @@ import { ProfileMenu } from './components/ProfileMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
 import { startActivity } from './lib/activity';
-import { onPoolClose, usePool, watchPool } from './lib/pool';
+import { isAdmin, onPoolClose, usePool, watchPool } from './lib/pool';
 import { getSettings, useSettings } from './lib/settings';
 import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { usd } from './lib/format';
@@ -111,7 +111,7 @@ export function App() {
         </a>
         {inApp && (
         <nav className="nav">
-          {(Object.keys(ROUTES) as Route[]).filter((r) => r !== 'profile' && (r !== 'admin' || (!!accountId && accountId === pool.owner))).map((r) => (
+          {(Object.keys(ROUTES) as Route[]).filter((r) => r !== 'profile' && (r !== 'admin' || isAdmin(accountId, pool.owner))).map((r) => (
             <a key={r} href={`#/${r}`} className={`nav-link ${route === r ? 'nav-on' : ''}`}>
               {ROUTES[r].label}
             </a>

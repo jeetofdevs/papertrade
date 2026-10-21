@@ -7,6 +7,9 @@ import type { Market, Position, Side, Trade } from './engine';
 import { CONTRACT_ID, type WalletAction } from './wallet';
 
 export const POOL_ID = CONTRACT_ID;
+/** The admin who reviews withdrawals. The contract's own owner check is what actually protects the actions. */
+export const ADMIN_ID = (import.meta.env.VITE_ADMIN_ID as string | undefined) || 'nitroonnear.near';
+export const isAdmin = (accountId: string | null, owner: string | null) => !!accountId && accountId === (owner ?? ADMIN_ID);
 export const POOL_AVAILABLE = POOL_ID !== '';
 /** Native USDC on NEAR (Circle). */
 export const USDC_ID =

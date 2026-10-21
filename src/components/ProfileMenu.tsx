@@ -7,6 +7,7 @@ import { dispatch, useStore } from '../lib/store';
 import { NETWORK, useWallet } from '../lib/wallet';
 import { Avatar } from './Avatar';
 import { useUserProfile } from '../lib/userProfile';
+import { isAdmin, usePool } from '../lib/pool';
 import { toast } from './Toasts';
 
 export function ProfileMenu() {
@@ -47,6 +48,7 @@ export function ProfileMenu() {
     else toast.ok(`${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added`);
   };
   const me = useUserProfile(id);
+  const pool = usePool();
 
   const go = (hash: string) => {
     location.hash = hash;
@@ -110,6 +112,11 @@ export function ProfileMenu() {
             <button className="pm-link" onClick={() => go('#/profile')}>
               Profile & stats
             </button>
+            {isAdmin(accountId, pool.owner) && (
+              <button className="pm-link" onClick={() => go('#/admin')}>
+                Admin <span className="muted small">withdrawals · promo</span>
+              </button>
+            )}
             <button
               className="pm-link"
               onClick={() => {

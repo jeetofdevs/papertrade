@@ -6,6 +6,7 @@ import { usd } from '../lib/format';
 import {
   approveWithdrawAction,
   fundPromoAction,
+  isAdmin,
   loadPromo,
   Promo,
   USDC_ID,
@@ -57,7 +58,7 @@ export function Admin() {
     return () => clearInterval(t);
   }, [load]);
 
-  if (owner && accountId !== owner) {
+  if (!isAdmin(accountId, owner)) {
     return (
       <div className="page">
         <div className="panel pad">

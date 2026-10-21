@@ -778,6 +778,12 @@ impl Contract {
         self.config = config;
     }
 
+    /// Hand the admin role to another account.
+    pub fn set_owner(&mut self, owner: AccountId) {
+        self.assert_owner();
+        self.owner = owner;
+    }
+
     pub fn set_oracle(&mut self, oracle: AccountId) {
         self.assert_owner();
         self.oracle = oracle;
