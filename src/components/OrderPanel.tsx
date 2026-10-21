@@ -1,4 +1,5 @@
 import { TokenIcon } from './TokenIcon';
+import { TpPicker } from './TpPicker';
 import { MARKET_NAME } from './MarketBar';
 import { useState } from 'react';
 import {
@@ -13,6 +14,8 @@ import {
   openPosition,
   takeProfitPrice,
   Side,
+  fillPrice,
+  slippage,
 } from '../lib/engine';
 import { compact, price, usd } from '../lib/format';
 import { usePrices } from '../lib/prices';
@@ -44,7 +47,10 @@ export function OrderPanel({ market }: { market: Market }) {
 
   const collateral = parseFloat(amount) || 0;
   const size = collateral * lev;
-  const liq = mark ? liquidationPrice(mark, side, lev) : 0;
+  // Expected fill after size-based slippage (the same rule the live contract uses).
+  const estSlip = slippage(size, state.pool.liquidity);
+  const entry = fillPrice(mark, side === 'long', estSlip);
+  const liq = mark ? liquidationPrice(entry, side, lev) : 0;
   const maxSize = state.pool.liquidity * MAX_SIZE_OF_POOL;
   const moveToLiq = (100 / lev).toFixed(lev >= 100 ? 3 : 2);
 
@@ -142,19 +148,7 @@ export function OrderPanel({ market }: { market: Market }) {
         </div>
       </div>
 
-      <div className="field">
-        <div className="field-head">
-          <label>Take profit</label>
-          <span className="muted mono">{tpRoe && mark ? price(takeProfitPrice(mark, side, lev, tpRoe)) : 'off'}</span>
-        </div>
-        <div className="row-chips">
-          {[0, 25, 50, 100, 300, 1000].map((r) => (
-            <button key={r} className={`chip ${tpRoe === r ? 'chip-on' : ''}`} onClick={() => setTpRoe(r)}>
-              {r ? `+${r}%` : 'Off'}
-            </button>
-          ))}
-        </div>
-      </div>
+      <TpPicker value={tpRoe} onChange={setTpRoe} tpPrice={tpRoe && mark ? takeProfitPrice(entry, side, lev, tpRoe) : null} />
 
       <dl className="summary">
         <div>
@@ -162,8 +156,14 @@ export function OrderPanel({ market }: { market: Market }) {
           <dd className="mono">{usd(size, 2)} USDC</dd>
         </div>
         <div>
-          <dt>Entry price</dt>
+          <dt>Mark price</dt>
           <dd className="mono">{price(mark)}</dd>
+        </div>
+        <div>
+          <dt>Entry after slippage</dt>
+          <dd className="mono">
+            {price(entry)} <span className="muted">({(estSlip * 100).toFixed(4)}%)</span>
+          </dd>
         </div>
         <div>
           <dt>Max loss price</dt>
@@ -174,8 +174,8 @@ export function OrderPanel({ market }: { market: Market }) {
           <dd className="mono">{moveToLiq}% move</dd>
         </div>
         <div>
-          <dt>Fees · slippage · funding</dt>
-          <dd className="mono accent">0 · 0 · 0</dd>
+          <dt>Fees · funding</dt>
+          <dd className="mono accent">0 · 0</dd>
         </div>
         <div>
           <dt>NITRO at max loss</dt>

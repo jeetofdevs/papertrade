@@ -86,9 +86,14 @@ contract on USDC. Running it again is safe; an existing contract is only replace
 To deploy by hand instead: `cd contract && cargo near build non-reproducible-wasm`, then
 `cd keeper && NEAR_PRIVATE_KEY=... KEEPER_SEED=... node deploy.mjs`.
 
-**New-user bonus.** After depositing at least 2 USDC a user can claim a 3 USDC bonus once. Withdrawals stay
-locked until their wagers (positions held 60 s or longer) reach 20x the bonus, 60 USDC; the bonus ends if the
-balance runs out. Bonuses are paid from a promo budget the owner funds on the Admin page (USDC with msg
+**New-user bonus.** After depositing at least 2 USDC (and following the X account) a user can claim a 3 USDC
+bonus once. It is display-only trading balance: no USDC moves at claim, bonus trades draw from it, and only when
+their trades (held 60 s or longer) reach 20x the bonus, 60 USDC, does the vault pay it into their real balance.
+Their own deposits stay withdrawable throughout; the bonus ends if it runs out.
+
+**Slippage.** Opens and closes fill with a base slippage (0.005%) plus price impact up to 0.02% at the largest
+position size (`slippage_base_ppm` / `slippage_impact_ppm`); demo mode uses the same rule. Traders also set a
+slippage tolerance, and take profit accepts any custom percentage. Bonuses are paid from a promo budget the owner funds on the Admin page (USDC with msg
 `"promo"`), so they never touch user balances or the vault. Amount, minimum deposit, multiple and hold time
 are in `set_config`; set `promo_amount` to 0 to stop the promo.
 

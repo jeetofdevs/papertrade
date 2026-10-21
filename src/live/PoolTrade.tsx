@@ -7,6 +7,7 @@ import { confirmDialog } from '../components/Confirm';
 import { MARKET_NAME } from '../components/MarketBar';
 import { PoolAccountCard } from '../components/PoolAccountCard';
 import { PromoCard } from '../components/PromoCard';
+import { TpPicker } from '../components/TpPicker';
 import { ShareCard, ShareData } from '../components/ShareCard';
 import { toast } from '../components/Toasts';
 import { TokenIcon } from '../components/TokenIcon';
@@ -24,6 +25,7 @@ import {
   SLIPPAGE_CHOICES,
   tradesFromLedger,
   usePool,
+  estimateSlippage,
 } from '../lib/pool';
 import { usePrices } from '../lib/prices';
 import { getSettings, useSettings } from '../lib/settings';
@@ -85,7 +87,10 @@ function PoolOrderPanel({ market }: { market: Market }) {
 
   const wager = parseFloat(amount) || 0;
   const size = wager * lev;
-  const entry = mark * (side === 'long' ? 1 + pool.config.spread : 1 - pool.config.spread);
+  // Expected fill: spread plus size-based slippage, the same way the contract fills.
+  const estSlip = estimateSlippage(pool.config, pool.vault.liquidity, wager * lev);
+  const entry = mark * (side === 'long' ? 1 + pool.config.spread : 1 - pool.config.spread) * (side === 'long' ? 1 + estSlip : 1 - estSlip);
+  const fromBonus = pool.userPromo.locked && wager > 0 && wager <= pool.userPromo.bonus;
   const liq = mark ? liquidationPrice(entry, side, lev) : 0;
   const maxSize = pool.vault.liquidity * pool.config.maxPositionShare;
   const maxPayout = wager * Math.min(pool.config.maxProfitMultiple, tpRoe > 0 ? tpRoe / 100 : Infinity);
@@ -94,7 +99,7 @@ function PoolOrderPanel({ market }: { market: Market }) {
   let problem: string | null = null;
   if (!accountId) problem = 'Connect your NEAR wallet to trade.';
   else if (pool.missing) problem = 'Live USDC trading opens as soon as the Nitro contract is live on NEAR mainnet.';
-  else if (wager > pool.balance) problem = 'Not enough balance. Deposit USDC first.';
+  else if (wager > pool.balance && !fromBonus) problem = 'Not enough balance. Deposit USDC first.';
   else if (wager > 0 && wager < pool.config.minWager) problem = `Minimum wager is ${usd(pool.config.minWager)} USDC.`;
   else if (pool.ready && size > maxSize) problem = `Max position size right now is ${usd(maxSize, 0)} USDC.`;
 
@@ -116,7 +121,7 @@ function PoolOrderPanel({ market }: { market: Market }) {
     }
     setBusy(true);
     try {
-      await signAndSend(POOL_ID, [openAction({ market, side, wager, leverage: lev, tpRoe, limit: limitPrice(mark, side === 'long', slip) })]);
+      await signAndSend(POOL_ID, [openAction({ market, side, wager, leverage: lev, tpRoe, limit: limitPrice(entry, side === 'long', slip) })]);
       sound.open();
       toast.ok(`Opened ${side} ${market} ${lev}x · ${usd(size, 0)} USDC`);
       refreshPool();
@@ -147,6 +152,12 @@ function PoolOrderPanel({ market }: { market: Market }) {
           <span className="label">Balance</span>
           <b className="mono">{usd(pool.balance)} USDC</b>
         </div>
+        {pool.userPromo.locked && (
+          <div title="Bonus balance: trade with it; it becomes withdrawable after the turnover">
+            <span className="label">Bonus</span>
+            <b className="mono bonus-amt">🎁 {usd(pool.userPromo.bonus)}</b>
+          </div>
+        )}
         <button className="btn btn-sm btn-primary" onClick={() => setFunds(true)} disabled={!accountId}>
           Deposit
         </button>
@@ -205,19 +216,7 @@ function PoolOrderPanel({ market }: { market: Market }) {
         </div>
       </div>
 
-      <div className="field">
-        <div className="field-head">
-          <label>Take profit</label>
-          <span className="muted mono">{tpRoe && mark ? price(takeProfitPrice(entry, side, lev, tpRoe)) : 'off'}</span>
-        </div>
-        <div className="row-chips">
-          {[0, 25, 50, 100, 300, 1000].map((r) => (
-            <button key={r} className={`chip ${tpRoe === r ? 'chip-on' : ''}`} onClick={() => setTpRoe(r)}>
-              {r ? `+${r}%` : 'Off'}
-            </button>
-          ))}
-        </div>
-      </div>
+      <TpPicker value={tpRoe} onChange={setTpRoe} tpPrice={tpRoe && mark ? takeProfitPrice(entry, side, lev, tpRoe) : null} max={pool.config.maxProfitMultiple * 100} />
 
       <div className="field">
         <div className="field-head">
@@ -243,8 +242,12 @@ function PoolOrderPanel({ market }: { market: Market }) {
           <dd className="mono">{price(entry)}</dd>
         </div>
         <div>
-          <dt>Worst entry (slippage)</dt>
-          <dd className="mono">{price(limitPrice(mark, side === 'long', slip))}</dd>
+          <dt>Est. slippage</dt>
+          <dd className="mono">{(estSlip * 100).toFixed(4)}%</dd>
+        </div>
+        <div>
+          <dt>Worst entry (your limit)</dt>
+          <dd className="mono">{price(limitPrice(entry, side === 'long', slip))}</dd>
         </div>
         <div>
           <dt>Max loss price</dt>
@@ -266,7 +269,8 @@ function PoolOrderPanel({ market }: { market: Market }) {
         </div>
       </dl>
 
-      {pool.balance < pool.config.minWager && accountId && !pool.missing ? (
+      {fromBonus && <p className="bonus-note">🎁 Paid from your bonus balance</p>}
+      {pool.balance < pool.config.minWager && !(pool.userPromo.locked && pool.userPromo.bonus >= pool.config.minWager) && accountId && !pool.missing ? (
         <button className="btn btn-primary btn-block" onClick={() => setFunds(true)}>
           Deposit USDC to start
         </button>

@@ -54,7 +54,7 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
     return (
       <div className={`promo promo-active ${compact ? 'promo-compact' : ''}`}>
         <div className="promo-top">
-          <span className="promo-badge">🎁 {usd(me.bonus)} bonus active</span>
+          <span className="promo-badge">🎁 Bonus balance {usd(me.bonus)}</span>
           <span className="mono small">
             {usd(me.wagered)} / {usd(me.required)} traded
           </span>
@@ -63,7 +63,8 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
           <span style={{ width: `${pct}%` }} />
         </div>
         <p className="muted small">
-          Withdrawals unlock after {usd(me.required - me.wagered)} USDC more in wagers. Only trades held {p.minHoldSec}s or longer count.
+          Trade with it like normal balance. It turns into withdrawable USDC after {usd(me.required - me.wagered)} USDC more in trades (held{' '}
+          {p.minHoldSec}s or longer). Your own deposits stay withdrawable.
         </p>
       </div>
     );
@@ -119,11 +120,21 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
           {deposited && <span className="small up">✓</span>}
         </li>
       </ol>
-      <button className="btn btn-primary btn-block" disabled={!canClaim || busy} onClick={claim}>
-        {busy ? 'Confirm in your wallet…' : pool.missing ? 'Claim opens when live trading starts' : `Claim ${usd(p.amount)} USDC`}
-      </button>
+      {pool.missing ? (
+        <div className="promo-soon">
+          <span className="pending-dot" aria-hidden="true" />
+          <span>
+            <b>Claiming opens at launch.</b> Do steps 1–3 now and your bonus is ready to claim the moment live trading starts.
+          </span>
+        </div>
+      ) : (
+        <button className="btn btn-primary btn-block" disabled={!canClaim || busy} onClick={claim}>
+          {busy ? 'Confirm in your wallet…' : `Claim ${usd(p.amount)} USDC bonus`}
+        </button>
+      )}
       <p className="muted small">
-        Withdrawals unlock after {usd(turnover)} USDC in total wagers. We check the follow when you withdraw.
+        The bonus is trading balance: it becomes withdrawable USDC after {usd(turnover)} USDC in trades ({p.multiple}x). We check the follow when
+        you withdraw.
       </p>
     </div>
   );

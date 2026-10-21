@@ -86,6 +86,7 @@ interface RawAccount {
   pending_withdraw?: string;
   promo_claimed?: boolean;
   promo_bonus?: string;
+  promo_backed?: string;
   promo_wager_required?: string;
   promo_wagered?: string;
   x_handle?: string | null;
@@ -111,8 +112,9 @@ export interface Promo {
 }
 export interface UserPromo {
   claimed: boolean;
-  /** A bonus is active and withdrawals are locked until the turnover is reached. */
+  /** A bonus is active: the bonus balance can be traded but not withdrawn until the turnover is reached. */
   locked: boolean;
+  /** Bonus balance (display-only credit plus any winnings made with it). */
   bonus: number;
   required: number;
   wagered: number;
@@ -151,6 +153,8 @@ interface RawPosition {
   tp: string | null;
   reserved: string;
   opened_at: number;
+  bonus_virtual?: string;
+  bonus_backed?: string;
 }
 interface RawEntry {
   kind: string;
@@ -175,6 +179,8 @@ interface RawConfig {
   spread_bps: number;
   min_deposit: string;
   max_deposit?: string;
+  slippage_base_ppm?: number;
+  slippage_impact_ppm?: number;
 }
 interface RawVault {
   liquidity: string;
@@ -223,6 +229,9 @@ export interface PoolConfig {
   minDeposit: number;
   /** Largest single deposit in USDC (0 = no limit). */
   maxDeposit: number;
+  /** Slippage as fractions: base, and extra impact at the largest position size. */
+  slippageBase: number;
+  slippageImpact: number;
 }
 
 export interface PoolState {
@@ -271,7 +280,7 @@ const EMPTY: PoolState = {
   totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
   positions: [],
   ledger: [],
-  config: { maxLeverage: 1000, minWager: 1, maxPositionShare: 0.02, maxProfitMultiple: 10, profitFee: 0.1, spread: 0, minDeposit: 1, maxDeposit: MAX_DEPOSIT },
+  config: { maxLeverage: 1000, minWager: 1, maxPositionShare: 0.02, maxProfitMultiple: 10, profitFee: 0.1, spread: 0, minDeposit: 1, maxDeposit: MAX_DEPOSIT, slippageBase: 0.00005, slippageImpact: 0.0002 },
   vault: { liquidity: 0, free: 0 },
 };
 
@@ -288,6 +297,7 @@ const toPosition = (p: RawPosition): Position => {
     liq: fromPrice(p.liq),
     tp: p.tp ? fromPrice(p.tp) : null,
     openedAt: Math.floor(p.opened_at / 1e6),
+    bonus: Number(p.bonus_virtual ?? 0) + Number(p.bonus_backed ?? 0) > 0,
   };
 };
 
@@ -456,6 +466,8 @@ async function load() {
         spread: (config.spread_bps ?? 0) / 10_000,
         minDeposit: fromUsdc(config.min_deposit ?? '1000000'),
         maxDeposit: config.max_deposit != null ? fromUsdc(config.max_deposit) : MAX_DEPOSIT,
+        slippageBase: (config.slippage_base_ppm ?? 50) / 1e6,
+        slippageImpact: (config.slippage_impact_ppm ?? 200) / 1e6,
       },
       vault: { liquidity: fromUsdc(vault.liquidity), free: fromUsdc(vault.free) },
     });
@@ -744,3 +756,9 @@ export const openAction = (p: { market: Market; side: Side; wager: number; lever
   );
 
 export const closeAction = (id: string, limit: number) => call('close_position', { id: Number(id), acceptable_price: toPrice(limit) }, 100);
+
+/** Estimated slippage (fraction) for a position of `size` USDC, mirroring the contract. */
+export function estimateSlippage(cfg: PoolConfig, vaultLiquidity: number, size: number): number {
+  const maxSize = Math.max(1, vaultLiquidity * cfg.maxPositionShare);
+  return cfg.slippageBase + (cfg.slippageImpact * Math.min(size, maxSize)) / maxSize;
+}

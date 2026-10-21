@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   account,
   claimPending,
@@ -11,6 +11,8 @@ import {
   poolDeposit,
   poolWithdraw,
   runLiquidations,
+  setSlippage,
+  SLIPPAGE,
   sharePrice,
   State,
 } from './engine';
@@ -19,6 +21,11 @@ const ME = 'alice.testnet';
 const funded = (): State => faucet(initialState(), ME, Date.now()).state;
 
 describe('engine', () => {
+  // Exact-number tests run without slippage; slippage has its own test below.
+  const saved = { ...SLIPPAGE };
+  beforeAll(() => setSlippage(0, 0));
+  afterAll(() => setSlippage(saved.base, saved.impact));
+
   it('faucet gives USDC once per day', () => {
     const s = funded();
     expect(account(s, ME).usdc).toBe(1_000);
@@ -118,5 +125,17 @@ describe('engine', () => {
   it('places a short take profit below entry', () => {
     const s = openPosition(funded(), ME, { market: 'BTC', side: 'short', collateral: 10, leverage: 100, tpRoe: 100 }, 1000, 1).state;
     expect(account(s, ME).positions[0].tp).toBeCloseTo(990);
+  });
+
+  it('fills opens and closes with size-based slippage', () => {
+    setSlippage(0.00005, 0.0002);
+    const s0 = funded();
+    const { state } = openPosition(s0, ME, { market: 'NEAR', side: 'long', collateral: 100, leverage: 10 }, 5.41, 0);
+    const pos = account(state, ME).positions[0];
+    expect(pos.entry).toBeGreaterThan(5.41); // a long buys a little higher
+    const closed = closePosition(state, ME, pos.id, 5.41, 1).state;
+    expect(account(closed, ME).history[0].exit).toBeLessThan(5.41); // and sells a little lower
+    expect(account(closed, ME).usdc).toBeLessThan(1_000);
+    setSlippage(0, 0);
   });
 });

@@ -211,8 +211,7 @@ export function PoolAccountCard() {
   if (pool.missing) return <EarlyDepositCard />;
 
   const n = Number(amount);
-  const locked = pool.userPromo.locked;
-  const valid = n > 0 && n <= pool.balance && !locked;
+  const valid = n > 0 && n <= pool.balance;
 
   const withdraw = async () => {
     if (!valid) return;
@@ -304,7 +303,7 @@ export function PoolAccountCard() {
           <button className="btn btn-primary pool-go" disabled={!valid || busy} onClick={withdraw}>
             {busy ? 'Confirm in your wallet…' : 'Request withdrawal'}
           </button>
-          {locked && <p className="hint err">Withdrawals are locked until your bonus turnover is done.</p>}
+          {pool.userPromo.locked && <p className="muted small">Your bonus balance ({usd(pool.userPromo.bonus)}) is not included until its turnover is done.</p>}
           <p className="muted small">
             Withdrawals are paid in USDC and reviewed by the Nitro team. The amount is locked while it waits, then sent to your NEAR wallet once
             approved. You can cancel any time before that.

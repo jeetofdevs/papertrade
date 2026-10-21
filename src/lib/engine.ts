@@ -33,6 +33,8 @@ export interface Position {
   /** Take profit price; the position closes automatically when the mark reaches it. */
   tp?: number | null;
   openedAt: number;
+  /** Live mode: paid from the display-only bonus. */
+  bonus?: boolean;
 }
 
 export interface Trade {
@@ -154,6 +156,20 @@ export function hitTakeProfit(pos: Position, mark: number): boolean {
   return pos.side === 'long' ? mark >= pos.tp : mark <= pos.tp;
 }
 
+/** Slippage on opens and closes, as a fraction: a base plus price impact growing with size (same as the contract). */
+export const SLIPPAGE = { base: 0.00005, impact: 0.0002 };
+/** Tests can turn slippage off to check exact numbers. */
+export function setSlippage(base: number, impact: number) {
+  SLIPPAGE.base = base;
+  SLIPPAGE.impact = impact;
+}
+export function slippage(size: number, poolLiquidity: number, base = SLIPPAGE.base, impact = SLIPPAGE.impact, maxShare = MAX_SIZE_OF_POOL): number {
+  const maxSize = Math.max(1, poolLiquidity * maxShare);
+  return base + (impact * Math.min(size, maxSize)) / maxSize;
+}
+/** Execution price after slippage: buying pays more, selling gets less. */
+export const fillPrice = (mark: number, buy: boolean, slip: number) => mark * (buy ? 1 + slip : 1 - slip);
+
 export function openPosition(state: State, id: string, p: OpenParams, mark: number, now: number): Result {
   const acct = account(state, id);
   if (!(mark > 0)) return { state, error: 'No price yet' };
@@ -164,6 +180,7 @@ export function openPosition(state: State, id: string, p: OpenParams, mark: numb
   const maxSize = state.pool.liquidity * MAX_SIZE_OF_POOL;
   if (size > maxSize) return { state, error: `Max position size is ${Math.floor(maxSize).toLocaleString('en-US')} USDC` };
 
+  const entry = fillPrice(mark, p.side === 'long', slippage(size, state.pool.liquidity));
   const pos: Position = {
     id: newId(now),
     market: p.market,
@@ -171,9 +188,9 @@ export function openPosition(state: State, id: string, p: OpenParams, mark: numb
     collateral: p.collateral,
     leverage: p.leverage,
     size,
-    entry: mark,
-    liq: liquidationPrice(mark, p.side, p.leverage),
-    tp: p.tpRoe ? takeProfitPrice(mark, p.side, p.leverage, p.tpRoe) : null,
+    entry,
+    liq: liquidationPrice(entry, p.side, p.leverage),
+    tp: p.tpRoe ? takeProfitPrice(entry, p.side, p.leverage, p.tpRoe) : null,
     openedAt: now,
   };
   return {
@@ -199,7 +216,9 @@ export function closePosition(
   const pos = acct.positions.find((x) => x.id === posId);
   if (!pos) return { state, error: 'Position not found' };
 
-  const pnl = reason === 'liquidated' ? -pos.collateral : unrealizedPnl(pos, mark);
+  // Closing by hand fills with slippage; take profit and max loss settle at their exact levels.
+  const exit = reason === 'close' ? fillPrice(mark, pos.side === 'short', slippage(pos.size, state.pool.liquidity)) : mark;
+  const pnl = reason === 'liquidated' ? -pos.collateral : Math.max(-pos.collateral, unrealizedPnl(pos, exit));
   const pool = { ...state.pool };
   let usdc = acct.usdc;
   let pending = acct.pendingProfit;
@@ -224,7 +243,7 @@ export function closePosition(
     size: pos.size,
     leverage: pos.leverage,
     entry: pos.entry,
-    exit: mark,
+    exit,
     pnl: round(pnl),
     nitro: round(nitro),
     reason,

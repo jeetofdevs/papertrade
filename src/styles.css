@@ -3874,3 +3874,30 @@ html.uwuless .chart-scene .sky-comet {
 .promo-popup p { margin: 0; }
 .promo-popup .promo { text-align: left; }
 .promo-gift { font-size: 44px; line-height: 1; animation: hop 1.2s ease-in-out infinite; }
+.tp-input { margin-top: 6px; }
+.tp-input input { min-width: 0; }
+.tp-input-on { border-color: var(--mint); }
+.bonus-amt { color: var(--mint); }
+.bonus-note { margin: 0; font-size: 13px; font-weight: 700; color: var(--mint); text-align: center; }
+.promo-soon { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; font-size: 13px; background: rgba(255, 181, 71, 0.1); border: 1px solid rgba(255, 181, 71, 0.35); }
+.promo-soon .pending-dot { margin-top: 5px; flex: none; }
+
+/* ---------- Welcome bonus popup ---------- */
+.promo-backdrop { backdrop-filter: blur(6px); }
+.promo-pop { position: relative; width: min(440px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; border-radius: 24px; background: var(--panel); border: 1px solid rgba(0, 236, 151, 0.35); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6), 0 0 80px rgba(0, 236, 151, 0.15); animation: promo-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes promo-in { from { transform: translateY(24px) scale(0.92); opacity: 0; } }
+.promo-pop-x { position: absolute; top: 12px; right: 12px; z-index: 3; background: rgba(0, 0, 0, 0.35); color: #fff; }
+.promo-pop-hero { position: relative; overflow: hidden; display: grid; justify-items: center; padding: 26px 20px 0; min-height: 230px; background: radial-gradient(circle at 50% 120%, rgba(0, 236, 151, 0.55), transparent 60%), linear-gradient(160deg, #0b2b20 0%, #142a3a 55%, #2a1f4a 100%); }
+.promo-pop-kicker { position: relative; z-index: 1; font: 800 12px var(--mono); letter-spacing: 3px; text-transform: uppercase; color: var(--mint); padding: 5px 12px; border-radius: 999px; background: rgba(0, 236, 151, 0.12); border: 1px solid rgba(0, 236, 151, 0.4); }
+.promo-pop-amount { position: relative; z-index: 1; font: 900 104px/1 Inter, sans-serif; letter-spacing: -6px; color: #f4f1e8; margin-top: 8px; text-shadow: 0 6px 40px rgba(0, 236, 151, 0.55); animation: promo-pulse 2.4s ease-in-out infinite; }
+.promo-pop-dollar { font-size: 56px; vertical-align: 38px; margin-right: 4px; color: var(--mint); }
+@keyframes promo-pulse { 50% { transform: scale(1.04); } }
+.promo-pop-sub { position: relative; z-index: 1; font: 800 13px var(--mono); letter-spacing: 4px; color: #cfe8df; }
+.promo-pop-dog { position: relative; z-index: 1; width: 120px; height: auto; margin-top: 6px; margin-bottom: -6px; filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.4)); }
+.promo-confetti { position: absolute; inset: 0; pointer-events: none; }
+.promo-confetti i { position: absolute; top: -12px; width: 7px; height: 12px; border-radius: 2px; opacity: 0.85; animation: confetti-fall 2.6s linear infinite; }
+@keyframes confetti-fall { to { transform: translateY(260px) rotate(540deg); } }
+.promo-pop-body { display: grid; gap: 12px; padding: 18px 18px 20px; }
+.promo-pop-body > p { margin: 0; text-align: center; }
+.promo-pop-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+@media (prefers-reduced-motion: reduce) { .promo-pop, .promo-pop-amount, .promo-confetti i { animation: none; } }
