@@ -1,0 +1,233 @@
+use super::*;
+use near_sdk::test_utils::VMContextBuilder;
+use near_sdk::testing_env;
+
+const USDC: u128 = 1_000_000; // 1 USDC in base units
+const P: u128 = PRICE_DECIMALS;
+
+fn acc(s: &str) -> AccountId {
+    s.parse().unwrap()
+}
+
+struct T {
+    c: Contract,
+    now: u64,
+}
+
+impl T {
+    fn new() -> Self {
+        let mut t = T { c: Contract::new(acc("owner.near"), acc("usdc.near"), acc("oracle.near")), now: 1_000 * NANOS };
+        t.as_("owner.near");
+        t
+    }
+    fn as_(&mut self, who: &str) -> &mut Self {
+        let ctx = VMContextBuilder::new()
+            .current_account_id(acc("nitro.near"))
+            .predecessor_account_id(acc(who))
+            .block_timestamp(self.now)
+            .build();
+        testing_env!(ctx);
+        self
+    }
+    fn deposit(&mut self, who: &str, usdc: u128, msg: &str) {
+        self.as_("usdc.near");
+        let _ = self.c.ft_on_transfer(acc(who), U128(usdc * USDC), msg.into());
+    }
+    fn price(&mut self, market: &str, price: u128) {
+        self.as_("oracle.near");
+        self.c.push_prices(vec![(market.into(), U128(price))]);
+    }
+    fn balance(&self, who: &str) -> u128 {
+        self.c.get_account(acc(who)).balance.0
+    }
+    fn later(&mut self, secs: u64) {
+        self.now += secs * NANOS;
+    }
+}
+
+fn setup() -> T {
+    let mut t = T::new();
+    t.deposit("lp.near", 1_000_000, "vault"); // $1M vault
+    t.deposit("alice.near", 1_000, "");
+    t.price("NEAR", 3 * P);
+    t
+}
+
+#[test]
+fn deposits_credit_balance_and_vault() {
+    let t = setup();
+    assert_eq!(t.balance("alice.near"), 1_000 * USDC);
+    let v = t.c.get_vault();
+    assert_eq!(v.liquidity.0, 1_000_000 * USDC);
+    assert_eq!(t.c.get_account(acc("lp.near")).vault_shares.0, 1_000_000 * USDC);
+}
+
+#[test]
+#[should_panic(expected = "Only USDC is accepted")]
+fn rejects_other_tokens() {
+    let mut t = setup();
+    t.as_("fake-usdc.near");
+    let _ = t.c.ft_on_transfer(acc("alice.near"), U128(5), "".into());
+}
+
+#[test]
+fn win_is_paid_from_vault_minus_fee() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(100 * USDC), 10, None);
+    assert_eq!(t.balance("alice.near"), 900 * USDC);
+    t.later(5);
+    t.price("NEAR", 3_150_000_00 / 1 * 1); // $3.15 (+5%)
+    t.as_("alice.near");
+    let r = t.c.close_position(id);
+    // +5% at 10x = +50% of the wager = $50 profit, 10% fee = $5
+    assert_eq!(r.pnl, (50 * USDC).to_string());
+    assert_eq!(r.fee.0, 5 * USDC);
+    assert_eq!(t.balance("alice.near"), 1_045 * USDC);
+    let v = t.c.get_vault();
+    assert_eq!(v.liquidity.0, 1_000_000 * USDC - 50 * USDC);
+    assert_eq!(v.fees.0, 5 * USDC);
+    assert_eq!(v.reserved.0, 0);
+}
+
+#[test]
+fn loss_goes_to_vault_and_mints_nitro() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(100 * USDC), 10, None);
+    t.price("NEAR", 2_940_000_00); // -2% at 10x = -20%
+    t.as_("alice.near");
+    t.c.close_position(id);
+    assert_eq!(t.balance("alice.near"), 980 * USDC);
+    assert_eq!(t.c.get_vault().liquidity.0, 1_000_020 * USDC);
+    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 20 * USDC * 10);
+}
+
+#[test]
+fn keeper_closes_at_max_loss_price() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), false, U128(10 * USDC), 1000, None);
+    let pos = t.c.get_position(id).unwrap();
+    assert_eq!(pos.liq.0, 3 * P * 1001 / 1000);
+    t.price("NEAR", 3_010_000_00); // +0.33%, far past max loss for a 1000x short
+    t.as_("keeper.near");
+    let out = t.c.run_keeper(vec![id, 999]);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].reason, "max_loss");
+    assert_eq!(out[0].pnl, (-(10 * USDC as i128)).to_string());
+    assert_eq!(t.balance("alice.near"), 990 * USDC);
+    assert!(t.c.get_position(id).is_none());
+}
+
+#[test]
+fn take_profit_settles_at_tp_price_even_after_overshoot() {
+    let mut t = setup();
+    t.as_("alice.near");
+    // +100% on the wager at 100x = +1% move
+    let id = t.c.open_position("NEAR".into(), true, U128(10 * USDC), 100, Some(10_000));
+    assert_eq!(t.c.get_position(id).unwrap().tp.unwrap().0, 3 * P * 10_100 / 10_000);
+    t.price("NEAR", 3_100_000_00); // +3.3%, overshoots the TP
+    t.as_("anyone.near");
+    let out = t.c.run_keeper(vec![id]);
+    assert_eq!(out[0].reason, "take_profit");
+    assert_eq!(out[0].pnl, (10 * USDC).to_string());
+    assert_eq!(t.balance("alice.near"), 990 * USDC + 20 * USDC - USDC); // wager back + $10 profit - $1 fee
+}
+
+#[test]
+fn profit_is_capped_at_reserved_payout() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(10 * USDC), 1000, None);
+    t.price("NEAR", 6 * P); // +100% at 1000x would be absurd; cap is 10x wager
+    t.as_("alice.near");
+    let r = t.c.close_position(id);
+    assert_eq!(r.pnl, (100 * USDC).to_string());
+}
+
+#[test]
+#[should_panic(expected = "Position too large for the vault")]
+fn caps_position_size() {
+    let mut t = setup();
+    t.as_("alice.near");
+    // 2% of $1M = $20K max size; $100 at 1000x = $100K
+    t.c.open_position("NEAR".into(), true, U128(100 * USDC), 1000, None);
+}
+
+#[test]
+#[should_panic(expected = "Price is stale")]
+fn refuses_stale_prices() {
+    let mut t = setup();
+    t.later(60);
+    t.as_("alice.near");
+    t.c.open_position("NEAR".into(), true, U128(10 * USDC), 10, None);
+}
+
+#[test]
+#[should_panic(expected = "reserved for open positions")]
+fn lp_cannot_withdraw_reserved_liquidity() {
+    let mut t = T::new();
+    t.deposit("lp.near", 100_000, "vault");
+    t.deposit("alice.near", 1_000, "");
+    t.price("NEAR", 3 * P);
+    t.as_("alice.near");
+    t.c.open_position("NEAR".into(), true, U128(200 * USDC), 10, None); // reserves $2,000
+    t.as_("lp.near");
+    let _ = t.c.vault_withdraw(U128(100_000 * USDC));
+}
+
+#[test]
+fn lp_share_price_rises_when_traders_lose() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(100 * USDC), 10, None);
+    t.price("NEAR", 2 * P);
+    t.as_("keeper.near");
+    t.c.run_keeper(vec![id]);
+    t.deposit("bob.near", 1_000_100, "vault");
+    // Bob paid $1,000,100 into a $1,000,100 vault, so he owns half the shares.
+    let bob = t.c.get_account(acc("bob.near")).vault_shares.0;
+    let lp = t.c.get_account(acc("lp.near")).vault_shares.0;
+    assert_eq!(bob, lp);
+}
+
+#[test]
+#[should_panic(expected = "Not your position")]
+fn cannot_close_someone_elses_position() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.open_position("NEAR".into(), true, U128(10 * USDC), 10, None);
+    t.as_("mallory.near");
+    t.c.close_position(id);
+}
+
+#[test]
+#[should_panic(expected = "Only the owner")]
+fn only_owner_can_change_config() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let c = t.c.get_config();
+    t.c.set_config(c);
+}
+
+#[test]
+fn owner_cannot_take_more_than_fees() {
+    let mut t = setup();
+    t.as_("owner.near");
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = t.c.withdraw_fees(U128(1));
+    }));
+    assert!(r.is_err());
+}
+
+#[test]
+fn withdraw_failure_refunds_balance() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let _ = t.c.withdraw(U128(100 * USDC));
+    assert_eq!(t.balance("alice.near"), 900 * USDC);
+    t.as_("nitro.near");
+    t.c.on_withdraw(acc("alice.near"), U128(100 * USDC), Err(PromiseError::Failed));
+    assert_eq!(t.balance("alice.near"), 1_000 * USDC);
+}
