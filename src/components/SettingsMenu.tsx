@@ -3,8 +3,8 @@ import { getSettings, setSetting, Settings, useSettings } from '../lib/settings'
 import { LeaveDialog } from './LeaveDialog';
 
 const OPTIONS: Array<{ key: keyof Settings; label: string; hint: string; indent?: boolean }> = [
-  { key: 'uwu', label: 'UWU mode', hint: 'Pastel theme, night sky and Nia the mascot' },
-  { key: 'uwuless', label: 'UWU-less mode', hint: 'Night sky on the chart, no room and no Nia' },
+  { key: 'uwu', label: 'UWU mode', hint: 'Pastel theme, cozy room and Batman the corgi' },
+  { key: 'uwuless', label: 'UWU-less mode', hint: 'Night sky on the chart, no room and no Batman' },
   { key: 'showEntries', label: 'Entries on chart', hint: 'Entry price line for each open position' },
   { key: 'showMaxLoss', label: 'Max loss on chart', hint: 'Price where each position closes at 100% loss' },
   { key: 'showTrades', label: 'Trades on chart', hint: 'Markers where you opened and closed' },
@@ -20,7 +20,7 @@ export function SettingsMenu() {
   const [leaving, setLeaving] = useState(false);
 
   const change = (key: keyof Settings, value: boolean) => {
-    // Turning UWU off (or switching to UWU-less) asks Nia first.
+    // Turning UWU off (or switching to UWU-less) asks Batman first.
     const fromUwu = getSettings().uwu && ((key === 'uwu' && !value) || (key === 'uwuless' && value));
     if (fromUwu) {
       setOpen(false);

@@ -5,15 +5,14 @@ import { usePrices } from '../lib/prices';
 import { useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
-import { NiaPortrait } from './NiaPortrait';
-import type { Mood } from './Waifu';
+import { Batman, type Mood } from './Batman';
 
 
 const LINES: Record<Mood, string[]> = {
-  happy: ['we are so up! (≧◡≦)', 'number go up uwu', 'to the moon, senpai!', 'so proud of you ♡'],
-  sad: ['it will come back… right?', 'hold me (╥﹏╥)', 'red candles again…', 'deep breaths, senpai'],
+  happy: ['woof! we are so up! (≧◡≦)', 'number go up = treats', 'to the moon, hooman!', 'good trade! *wags*'],
+  sad: ['it will come back… right?', '*sad whimper* (╥﹏╥)', 'red candles again…', 'belly rubs fix everything'],
   sleepy: ['zzz… open a trade?', 'wake me for 1000x', 'napping until you trade'],
-  neutral: ['watching the chart for you', 'any second now…', 'I believe in you, senpai'],
+  neutral: ['sniffing the chart for you', 'any second now…', 'I believe in you, hooman'],
 };
 
 // Theme switch plus the decorations for UWU mode. All art is drawn here as SVG.
@@ -87,7 +86,7 @@ function Mascot() {
       <span className="uwu-bubble" key={line}>
         {line}
       </span>
-      <NiaPortrait mood={mood} className="nia-corner" />
+      <Batman mood={mood} className="nia-corner" />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { compact, pct, price, usd } from '../lib/format';
 import { getTicks, loadTicks, Point, usePrices } from '../lib/prices';
 import { useWallet } from '../lib/wallet';
 import { MARKET_NAME } from '../components/MarketBar';
-import { NiaPortrait } from '../components/NiaPortrait';
+import { Batman } from '../components/Batman';
 
 /** SVG path for the last n ticks, scaled into a w×h box. */
 function sparkPath(m: Market, w: number, h: number, n = 160) {
@@ -378,8 +378,8 @@ export function Landing() {
           <div className="panel bento-card bento-uwu">
             <span className="bento-kicker">Vibes</span>
             <h3>UWU mode</h3>
-            <p className="muted">A pastel night sky and Nia, who cheers your wins and cries at your losses.</p>
-            <NiaPortrait mood="happy" className="bento-waifu" />
+            <p className="muted">A cozy pastel room and Batman the corgi, who wags at your wins and whimpers at your losses.</p>
+            <Batman mood="happy" className="bento-waifu" />
           </div>
           <div className="panel bento-card bento-live">
             <span className="bento-kicker">Live</span>
