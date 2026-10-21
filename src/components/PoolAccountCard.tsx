@@ -7,7 +7,7 @@ import {
   earlyDeposits,
   POOL_ID,
   poolCanReceiveUsdc,
-  preLaunchDepositAction,
+  preLaunchDepositActions,
   recordEarlyDeposit,
   refreshPool,
   requestWithdrawAction,
@@ -151,13 +151,22 @@ function EarlyDepositCard() {
 
   const n = Number(amount);
   const valid = !!accountId && n >= 1 && n <= pool.wallet;
+  const reason = !accountId
+    ? 'Connect your NEAR wallet first.'
+    : pool.wallet <= 0
+      ? 'This wallet has no USDC on NEAR. Send native USDC (NEAR network) to it first.'
+      : n > pool.wallet
+        ? `You only have ${usd(pool.wallet)} USDC in this wallet.`
+        : n > 0 && n < 1
+          ? 'Minimum deposit is 1 USDC.'
+          : null;
   const total = list.reduce((s, d) => s + d.amount, 0);
 
   const submit = async () => {
     if (!valid || !accountId) return;
     setBusy(true);
     try {
-      await signAndSend(USDC_ID, [preLaunchDepositAction(n, accountId)]);
+      await signAndSend(USDC_ID, preLaunchDepositActions(n, accountId, open === false));
       recordEarlyDeposit(accountId, { at: Date.now(), amount: n });
       setList(earlyDeposits(accountId));
       toast.ok(`Deposited ${usd(n)} USDC`);
@@ -197,11 +206,11 @@ function EarlyDepositCard() {
           </button>
           <span className="unit">USDC</span>
         </div>
-        <button className="btn btn-primary pool-go" disabled={!valid || busy || open === false} onClick={submit}>
+        <button className="btn btn-primary pool-go" disabled={!valid || busy} onClick={submit}>
           {busy ? 'Confirm in your wallet…' : 'Deposit USDC'}
         </button>
-        {n > 0 && n < 1 && <p className="hint err">Minimum deposit is 1 USDC.</p>}
-        {open === false && <p className="hint err">Deposits open in a moment: the Nitro account is being set up to receive USDC.</p>}
+        {reason && <p className="hint err">{reason}</p>}
+        {open === false && <p className="muted small">First deposit also registers the Nitro account on USDC (0.00125 NEAR, one time).</p>}
         <p className="muted small">
           Confirm one USDC transfer in your NEAR wallet. It is recorded on chain with your account, and lands in your trading balance as soon as
           live trading opens. Withdrawals open at the same time.

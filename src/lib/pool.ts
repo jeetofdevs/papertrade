@@ -31,6 +31,23 @@ class RpcError extends Error {
   }
 }
 
+/** Is the pool contract deployed? */
+export async function hasContractCode(): Promise<boolean> {
+  try {
+    const r = await fetch(RPC, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'nitro', method: 'query', params: { request_type: 'view_code', finality: 'final', account_id: POOL_ID } }),
+    });
+    const j = await r.json();
+    if (j.result?.code_base64) return true;
+    // Only a definite "no code / no account" answer counts as not deployed; network errors do not.
+    return !/NO_CONTRACT_CODE|UNKNOWN_ACCOUNT|CodeDoesNotExist|never been observed|does not exist/i.test(JSON.stringify(j.error ?? j.result?.error ?? ''));
+  } catch {
+    return true;
+  }
+}
+
 export async function view<T>(contractId: string, method: string, args: object = {}): Promise<T> {
   const r = await fetch(RPC, {
     method: 'POST',
@@ -44,7 +61,7 @@ export async function view<T>(contractId: string, method: string, args: object =
   });
   const j = await r.json();
   const err: string | undefined = j.error?.cause?.name ?? j.error?.message ?? j.result?.error;
-  if (err) throw new RpcError(err, /UNKNOWN_ACCOUNT|CodeDoesNotExist|MethodNotFound|does not exist/i.test(JSON.stringify(j.error ?? j.result?.error)));
+  if (err) throw new RpcError(err, /UNKNOWN_ACCOUNT|NO_CONTRACT_CODE|CodeDoesNotExist|MethodNotFound|MethodResolveError|does not exist|never been observed/i.test(JSON.stringify(j.error ?? j.result?.error)));
   return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)));
 }
 
@@ -390,7 +407,8 @@ async function load() {
       vault: { liquidity: fromUsdc(vault.liquidity), free: fromUsdc(vault.free) },
     });
   } catch (e) {
-    const missing = e instanceof RpcError && e.missing;
+    // Not deployed yet? Ask for the contract code directly rather than trusting the error text.
+    const missing = (e instanceof RpcError && e.missing) || !(await hasContractCode());
     // Before launch, still show the USDC in the user's wallet so they can deposit early.
     const wallet = missing ? await view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).then(fromUsdc, () => state.wallet) : state.wallet;
     if (id !== account) return;
@@ -464,9 +482,12 @@ const call = (methodName: string, args: object, tgas: number, deposit = '0'): Wa
 // Users can already send USDC to the pool account. Each transfer carries "nitro:<account>" in its memo,
 // and once the contract is deployed the keeper credits every such transfer to that account (each only once).
 
-/** Plain USDC transfer to the pool account, for before the contract is live. */
-export const preLaunchDepositAction = (usd: number, accountId: string): WalletAction =>
-  call('ft_transfer', { receiver_id: POOL_ID, amount: toUsdc(usd), memo: `nitro:${accountId}` }, 30, '1');
+/** Plain USDC transfer to the pool account, for before the contract is live. If the pool account is not
+ * registered on USDC yet, the same transaction registers it first (0.00125 NEAR storage deposit). */
+export const preLaunchDepositActions = (usd: number, accountId: string, register: boolean): WalletAction[] => [
+  ...(register ? [call('storage_deposit', { account_id: POOL_ID, registration_only: true }, 10, '1250000000000000000000')] : []),
+  call('ft_transfer', { receiver_id: POOL_ID, amount: toUsdc(usd), memo: `nitro:${accountId}` }, 30, '1'),
+];
 
 /** Can the pool account receive USDC (is it registered on the USDC contract)? */
 export async function poolCanReceiveUsdc(): Promise<boolean> {
