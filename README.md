@@ -71,7 +71,8 @@ and every user's balance is the sum of their transactions with it:
 Launch with small limits (`set_config`) until the contract has been audited. Oracle prices are pushed every
 10 s, so a faster interval reduces how stale a close price can be.
 
-**Deploy (near-cli-rs, mainnet):**
+**Deploy (near-cli-rs, mainnet):** install `cargo-near` first (`cargo install cargo-near --locked`; on Linux it
+needs `libudev-dev`). The build is about 210 KB.
 
 ```bash
 cd contract && cargo near build non-reproducible-wasm   # -> target/near/nitro_vault.wasm
