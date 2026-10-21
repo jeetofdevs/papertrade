@@ -6,6 +6,7 @@ import { useSettings } from '../lib/settings';
 import { dispatch, useStore } from '../lib/store';
 import { NETWORK, useWallet } from '../lib/wallet';
 import { Avatar } from './Avatar';
+import { useUserProfile } from '../lib/userProfile';
 import { toast } from './Toasts';
 
 export function ProfileMenu() {
@@ -45,6 +46,7 @@ export function ProfileMenu() {
     if (err) toast.err(err);
     else toast.ok(`${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added`);
   };
+  const me = useUserProfile(id);
 
   const go = (hash: string) => {
     location.hash = hash;
@@ -55,7 +57,7 @@ export function ProfileMenu() {
     <div className="menu-wrap" ref={ref}>
       <button className="profile-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <Avatar id={id} size={26} />
-        <span className="mono profile-btn-name">{shortAccount(id)}</span>
+        <span className={`profile-btn-name ${me.name ? '' : 'mono'}`}>{me.name || shortAccount(id)}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -66,7 +68,7 @@ export function ProfileMenu() {
           <div className="pm-head">
             <Avatar id={id} size={44} />
             <div className="pm-id">
-              <b className="mono">{shortAccount(id)}</b>
+              <b className={me.name ? '' : 'mono'}>{me.name || shortAccount(id)}</b>
               <span className="muted small">
                 NEAR {NETWORK} · {mode === 'live' ? 'Live' : 'Demo'}
               </span>

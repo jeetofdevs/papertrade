@@ -3806,3 +3806,16 @@ html.uwuless .chart-scene .sky-comet {
 .tag.ledger-open { color: var(--text); background: var(--panel-2); }
 .tag.ledger-close { color: var(--muted); background: var(--panel-2); }
 .tag.ledger-vault_deposit, .tag.ledger-vault_withdraw { color: #c9b8ff; background: rgba(201, 184, 255, 0.12); }
+
+/* ---------- Edit profile ---------- */
+.avatar-img { display: inline-block; border-radius: 50%; object-fit: cover; flex: none; }
+.edit-profile { width: min(380px, calc(100vw - 32px)); display: grid; gap: 12px; justify-items: center; }
+.edit-profile h3 { margin: 0; justify-self: start; }
+.edit-profile .field, .edit-profile .leave-actions, .edit-profile p { width: 100%; }
+.ep-photo { position: relative; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; cursor: pointer; display: grid; place-items: center; color: #fff; font-size: 48px; font-weight: 800; border: 2px solid var(--border-2); }
+.ep-photo img { width: 100%; height: 100%; object-fit: cover; }
+.ep-overlay { position: absolute; inset: auto 0 0 0; padding: 6px 0 10px; font-size: 12px; font-weight: 700; text-align: center; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); opacity: 0; transition: opacity 0.15s; }
+.ep-photo:hover .ep-overlay, .ep-photo:focus .ep-overlay { opacity: 1; }
+.ep-actions { display: flex; gap: 8px; }
+.profile-avatar { position: relative; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
+.profile-avatar .ep-edit { position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--mint); color: #03130d; font-size: 13px; border: 2px solid var(--panel); }

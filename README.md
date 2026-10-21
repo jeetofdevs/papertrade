@@ -34,25 +34,22 @@ Optional variables (Settings → Variables), read at build time:
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` or `testnet` |
-| `VITE_CONTRACT_ID` | _(empty)_ | The Nitro Pool contract (also the pool's deposit address). The pool card stays off until it is set |
+| `VITE_CONTRACT_ID` | `nitroonnear.near` | The Nitro pool contract used by Live mode |
 | `VITE_NEAR_RPC` | `https://free.rpc.fastnear.com` | NEAR RPC used for reads |
-| `VITE_ORDERLY_BROKER_ID` | _(empty)_ | Your Orderly broker (builder) ID. Live mode stays off until it is set |
 | `VITE_NIA_IMAGE` | _(empty)_ | Optional custom mascot illustration (for example `/nia.png` placed in `public/`) |
-| `VITE_ORDERLY_NETWORK` | `mainnet` | Orderly network for Live mode. Leave unset for real trading on mainnet |
 
-## Live mode (Orderly Network)
+## Live mode (real USDC)
 
-Switch the header toggle to **Live** to trade real USDC on Orderly Network's shared order book. There is no
-Nitro pool behind Live trades.
+Switch the header toggle to **Live** to trade real USDC against the Nitro pool contract (default
+`nitroonnear.near`, override with `VITE_CONTRACT_ID`).
 
-1. Register as an Orderly builder to get a broker ID (Orderly docs → Broker onboarding) and set
-   `VITE_ORDERLY_BROKER_ID`. Your fee rates are configured on Orderly's side for that broker.
-2. Traders connect an EVM wallet (MetaMask, Rabby…), create their Orderly account (one gasless signature) and
-   enable trading. That creates an Orderly trading key in the browser that can trade but never withdraw.
-3. Deposits go from the wallet's chain (for example Arbitrum) into Orderly from the **Deposit USDC** button.
-4. Orders are isolated-margin market orders, so the margin is the most a trader can lose, with an optional
-   take profit. Max leverage follows each Orderly market.
-
+- **Deposit:** enter an amount and press Deposit. The user signs one contract call from their NEAR wallet
+  (`ft_transfer_call` on USDC) and the contract adds it to their trading balance.
+- **Trade:** open and close call the contract directly with a slippage limit the trader picks (0.1–2%).
+  The owner can also set a spread with `set_config`. Wallets that support it sign trades without a popup.
+- **History:** every deposit, withdrawal, open and close is recorded per user in the contract (`get_ledger`)
+  and shown on the Profile page together with lifetime totals.
+- Until the contract is deployed, Live mode shows "launching soon".
 
 ## Nitro Pool (our own USDC pool on NEAR)
 
@@ -76,16 +73,16 @@ needs `libudev-dev`). The build is about 210 KB.
 
 ```bash
 cd contract && cargo near build non-reproducible-wasm   # -> target/near/nitro_vault.wasm
-near contract deploy nitro-pool.near use-file target/near/nitro_vault.wasm \
+near contract deploy nitroonnear.near use-file target/near/nitro_vault.wasm \
   with-init-call new json-args '{"owner":"you.near","usdc":"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1","oracle":"nitro-oracle.near"}' \
   prepaid-gas '100 Tgas' attached-deposit '0 NEAR' network-config mainnet sign-with-keychain send
 # Register the pool on the USDC contract so it can receive USDC
 near contract call-function as-transaction 17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 storage_deposit \
-  json-args '{"account_id":"nitro-pool.near"}' prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' \
+  json-args '{"account_id":"nitroonnear.near"}' prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' \
   sign-as you.near network-config mainnet sign-with-keychain send
 ```
 
-Then seed the vault by depositing USDC with msg `"vault"`, set `VITE_CONTRACT_ID=nitro-pool.near` on the web
+Then seed the vault by depositing USDC with msg `"vault"`, set `VITE_CONTRACT_ID=nitroonnear.near` on the web
 service, and run the keeper.
 
 **Keeper** (`keeper/`, a second Railway service with root directory `keeper`, start command `npm start`):

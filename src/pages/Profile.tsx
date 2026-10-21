@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Avatar } from '../components/Avatar';
 import { PoolAccountCard } from '../components/PoolAccountCard';
+import { EditProfile } from '../components/EditProfile';
+import { useUserProfile } from '../lib/userProfile';
 import { ShareCard, ShareData } from '../components/ShareCard';
 import { TokenIcon } from '../components/TokenIcon';
 import { account, Trade } from '../lib/engine';
@@ -54,7 +56,9 @@ export function Profile() {
     : demoAcct;
   const st = profileStats(state, acct);
   const [funds, setFunds] = useState(false);
+  const [editing, setEditing] = useState(false);
   const id = accountId ?? traderId;
+  const me = useUserProfile(id);
   const [share, setShare] = useState<ShareData | null>(null);
 
   const shareTrade = (t: Trade) =>
@@ -98,10 +102,16 @@ export function Profile() {
   return (
     <div className="page">
       <section className="panel profile-hero">
-        <Avatar id={id} size={72} />
+        <button className="profile-avatar" onClick={() => setEditing(true)} aria-label="Edit profile" title="Edit profile">
+          <Avatar id={id} size={72} />
+          <span className="ep-edit" aria-hidden="true">✎</span>
+        </button>
         <div className="profile-id">
-          <h1>Your profile</h1>
+          <h1>{me.name || 'Your profile'}</h1>
           <div className="profile-actions">
+            <button className="chip" onClick={() => setEditing(true)}>
+              Edit profile
+            </button>
             <span className="chip">{live ? 'Live · real USDC' : 'Demo account'}</span>
             {st.favourite && <span className="chip">Favourite: {st.favourite}-PERP</span>}
           </div>
@@ -209,6 +219,7 @@ export function Profile() {
       )}
       {share && <ShareCard data={share} onClose={() => setShare(null)} />}
       {funds && <FundsModal onClose={() => setFunds(false)} />}
+      {editing && <EditProfile id={id} onClose={() => setEditing(false)} />}
     </div>
   );
 }
