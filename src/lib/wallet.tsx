@@ -4,22 +4,16 @@ import { createContext, ReactNode, useContext, useEffect, useState } from 'react
 import type { WalletSelector } from '@near-wallet-selector/core';
 import type { WalletSelectorModal } from '@near-wallet-selector/modal-ui';
 import '@near-wallet-selector/modal-ui/styles.css';
+import { rpc } from './rpc';
 
 export const NETWORK = (import.meta.env.VITE_NEAR_NETWORK as 'testnet' | 'mainnet' | undefined) || 'mainnet';
 /** The Nitro pool contract. Live mode trades real USDC against it. */
 export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || 'nitroonnear.near';
-const RPC_URL = (import.meta.env.VITE_NEAR_RPC as string | undefined) || 'https://free.rpc.fastnear.com';
 
 /** Is the pool contract deployed? Sign-in asks for a trading key for it only when it is. */
 async function contractDeployed(): Promise<boolean> {
   try {
-    const r = await fetch(RPC_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 'nitro', method: 'query', params: { request_type: 'view_code', finality: 'final', account_id: CONTRACT_ID } }),
-      signal: AbortSignal.timeout(4000),
-    });
-    const j = await r.json();
+    const j = await rpc('query', { request_type: 'view_code', finality: 'final', account_id: CONTRACT_ID });
     return !!j.result?.code_base64;
   } catch {
     return false;

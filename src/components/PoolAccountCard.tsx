@@ -35,7 +35,9 @@ export function PoolAccountCard() {
   const max = tab === 'deposit' ? pool.wallet : pool.balance;
   const tooSmall = tab === 'deposit' && n > 0 && n < pool.config.minDeposit;
   const locked = tab === 'withdraw' && pool.userPromo.locked;
-  const valid = n > 0 && n <= max && !tooSmall && !locked;
+  // If the wallet balance could not be read, let the wallet itself refuse an amount that is too high.
+  const withinMax = tab === 'deposit' && !pool.walletKnown ? true : n <= max;
+  const valid = n > 0 && withinMax && !tooSmall && !locked;
 
   const submit = async () => {
     if (!valid) return;
@@ -78,7 +80,7 @@ export function PoolAccountCard() {
         </div>
         <div>
           <span className="label">In your wallet</span>
-          <b className="mono">${usd(pool.wallet)}</b>
+          <b className="mono">{pool.walletKnown ? `$${usd(pool.wallet)}` : "…"}</b>
         </div>
       </div>
       {pool.requests.length > 0 && (
@@ -96,7 +98,7 @@ export function PoolAccountCard() {
           ))}
         </div>
       )}
-      {pool.error && <p className="hint err">Could not load your balance: {pool.error}</p>}
+      {pool.error && <p className="hint err">{pool.error}</p>}
 
       <div className="pool-tabs">
         {(['deposit', 'withdraw'] as Tab[]).map((t) => (
@@ -150,12 +152,12 @@ function EarlyDepositCard() {
   }, [accountId]);
 
   const n = Number(amount);
-  const valid = !!accountId && n >= 1 && n <= pool.wallet;
+  const valid = !!accountId && n >= 1 && (!pool.walletKnown || n <= pool.wallet);
   const reason = !accountId
     ? 'Connect your NEAR wallet first.'
-    : pool.wallet <= 0
+    : pool.walletKnown && pool.wallet <= 0
       ? 'This wallet has no USDC on NEAR. Send native USDC (NEAR network) to it first.'
-      : n > pool.wallet
+      : pool.walletKnown && n > pool.wallet
         ? `You only have ${usd(pool.wallet)} USDC in this wallet.`
         : n > 0 && n < 1
           ? 'Minimum deposit is 1 USDC.'
@@ -189,7 +191,7 @@ function EarlyDepositCard() {
         </div>
         <div>
           <span className="label">In your wallet</span>
-          <b className="mono">${usd(pool.wallet)}</b>
+          <b className="mono">{pool.walletKnown ? `$${usd(pool.wallet)}` : "…"}</b>
         </div>
       </div>
       <div className="field">

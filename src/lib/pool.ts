@@ -4,6 +4,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { Market, Position, Side, Trade } from './engine';
+import { rpc } from './rpc';
 import { CONTRACT_ID, type WalletAction } from './wallet';
 
 export const POOL_ID = CONTRACT_ID;
@@ -14,11 +15,12 @@ export const POOL_AVAILABLE = POOL_ID !== '';
 /** Native USDC on NEAR (Circle). */
 export const USDC_ID =
   (import.meta.env.VITE_USDC_CONTRACT as string | undefined) || '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
-const RPC = (import.meta.env.VITE_NEAR_RPC as string | undefined) || 'https://free.rpc.fastnear.com';
 const USDC = 1_000_000;
 const PRICE = 100_000_000;
 const TGAS = '000000000000';
-const POLL_MS = 4_000;
+const POLL_MS = 8_000;
+/** Config, vault, owner, promo and requests change rarely: refresh them every this many polls. */
+const SLOW_EVERY = 5;
 
 // ---------- RPC ----------
 
@@ -34,12 +36,7 @@ class RpcError extends Error {
 /** Is the pool contract deployed? */
 export async function hasContractCode(): Promise<boolean> {
   try {
-    const r = await fetch(RPC, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 'nitro', method: 'query', params: { request_type: 'view_code', finality: 'final', account_id: POOL_ID } }),
-    });
-    const j = await r.json();
+    const j = await rpc('query', { request_type: 'view_code', finality: 'final', account_id: POOL_ID });
     if (j.result?.code_base64) return true;
     // Only a definite "no code / no account" answer counts as not deployed; network errors do not.
     return !/NO_CONTRACT_CODE|UNKNOWN_ACCOUNT|CodeDoesNotExist|never been observed|does not exist/i.test(JSON.stringify(j.error ?? j.result?.error ?? ''));
@@ -49,17 +46,13 @@ export async function hasContractCode(): Promise<boolean> {
 }
 
 export async function view<T>(contractId: string, method: string, args: object = {}): Promise<T> {
-  const r = await fetch(RPC, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'nitro',
-      method: 'query',
-      params: { request_type: 'call_function', finality: 'optimistic', account_id: contractId, method_name: method, args_base64: btoa(JSON.stringify(args)) },
-    }),
+  const j = await rpc('query', {
+    request_type: 'call_function',
+    finality: 'optimistic',
+    account_id: contractId,
+    method_name: method,
+    args_base64: btoa(JSON.stringify(args)),
   });
-  const j = await r.json();
   const err: string | undefined = j.error?.cause?.name ?? j.error?.message ?? j.result?.error;
   if (err) throw new RpcError(err, /UNKNOWN_ACCOUNT|NO_CONTRACT_CODE|CodeDoesNotExist|MethodNotFound|MethodResolveError|does not exist|never been observed/i.test(JSON.stringify(j.error ?? j.result?.error)));
   return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)));
@@ -243,6 +236,8 @@ export interface PoolState {
   nitro: number;
   /** USDC in the user's NEAR wallet. */
   wallet: number;
+  /** False when the wallet balance could not be read (busy RPC); the UI then does not cap amounts by it. */
+  walletKnown: boolean;
   totals: { deposited: number; withdrawn: number; volume: number; profit: number; loss: number; trades: number };
   positions: Position[];
   ledger: LedgerItem[];
@@ -262,6 +257,7 @@ const EMPTY: PoolState = {
   userPromo: { claimed: false, locked: false, bonus: 0, required: 0, wagered: 0 },
   nitro: 0,
   wallet: 0,
+  walletKnown: false,
   totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
   positions: [],
   ledger: [],
@@ -340,20 +336,47 @@ function set(next: PoolState) {
   listeners.forEach((l) => l());
 }
 
+let tick = 0;
+let deployed: boolean | null = null;
+let slow: { config: RawConfig; vault: RawVault; requests: RawRequest[]; owner: string | null; promo: RawPromo | null } | null = null;
+
+async function loadWallet(id: string): Promise<{ wallet: number; walletKnown: boolean }> {
+  try {
+    return { wallet: fromUsdc(await view<string>(USDC_ID, 'ft_balance_of', { account_id: id })), walletKnown: true };
+  } catch {
+    return { wallet: state.wallet, walletKnown: state.walletKnown };
+  }
+}
+
 async function load() {
   const id = account;
   if (!id || !POOL_AVAILABLE) return;
+  tick++;
+  // Before launch only the wallet balance matters; re-check for the contract every few polls.
+  if (deployed !== true && (deployed === null || tick % SLOW_EVERY === 1)) deployed = await hasContractCode();
+  if (!deployed) {
+    const w = await loadWallet(id);
+    if (id !== account) return;
+    set({ ...state, ready: true, missing: true, error: null, ...w });
+    return;
+  }
   try {
-    const [a, positions, ledger, config, vault, wallet, requests, owner, promo] = await Promise.all([
+    if (!slow || tick % SLOW_EVERY === 0) {
+      const [config, vault, requests, owner, promo] = await Promise.all([
+        view<RawConfig>(POOL_ID, 'get_config'),
+        view<RawVault>(POOL_ID, 'get_vault'),
+        view<RawRequest[]>(POOL_ID, 'get_withdraw_requests', { from_index: 0, limit: 200 }).catch(() => [] as RawRequest[]),
+        view<string>(POOL_ID, 'get_owner').catch(() => null),
+        view<RawPromo>(POOL_ID, 'get_promo').catch(() => null),
+      ]);
+      slow = { config, vault, requests, owner, promo };
+    }
+    const { config, vault, requests, owner, promo } = slow;
+    const [a, positions, ledger, w] = await Promise.all([
       view<RawAccount>(POOL_ID, 'get_account', { account_id: id }),
       view<RawPosition[]>(POOL_ID, 'get_positions', { account_id: id }),
       view<RawEntry[]>(POOL_ID, 'get_ledger', { account_id: id, from_index: 0, limit: 100 }),
-      view<RawConfig>(POOL_ID, 'get_config'),
-      view<RawVault>(POOL_ID, 'get_vault'),
-      view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).catch(() => '0'),
-      view<RawRequest[]>(POOL_ID, 'get_withdraw_requests', { from_index: 0, limit: 200 }).catch(() => [] as RawRequest[]),
-      view<string>(POOL_ID, 'get_owner').catch(() => null),
-      view<RawPromo>(POOL_ID, 'get_promo').catch(() => null),
+      loadWallet(id),
     ]);
     if (id !== account) return;
     const items = ledger.map(toItem);
@@ -386,7 +409,7 @@ async function load() {
         wagered: fromUsdc(a.promo_wagered ?? '0'),
       },
       nitro: fromUsdc(a.nitro),
-      wallet: fromUsdc(wallet),
+      ...w,
       totals: {
         deposited: fromUsdc(a.total_deposited),
         withdrawn: fromUsdc(a.total_withdrawn),
@@ -410,11 +433,11 @@ async function load() {
     });
   } catch (e) {
     // Not deployed yet? Ask for the contract code directly rather than trusting the error text.
-    const missing = (e instanceof RpcError && e.missing) || !(await hasContractCode());
-    // Before launch, still show the USDC in the user's wallet so they can deposit early.
-    const wallet = missing ? await view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).then(fromUsdc, () => state.wallet) : state.wallet;
+    const missing = e instanceof RpcError && e.missing;
+    if (missing) deployed = false;
+    const w = await loadWallet(id);
     if (id !== account) return;
-    set({ ...state, ready: true, missing, wallet, error: missing ? null : (e as Error).message });
+    set({ ...state, ready: true, missing, ...w, error: missing ? null : 'The network is busy, retrying…' });
   }
 }
 
@@ -423,6 +446,8 @@ export function watchPool(accountId: string | null) {
   if (accountId === account) return;
   account = accountId;
   seenCloses = null;
+  tick = 0;
+  slow = null;
   clearInterval(timer);
   set(EMPTY);
   if (!accountId) return;
