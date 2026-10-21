@@ -5,7 +5,6 @@ import { useSettings } from '../lib/settings';
 import { NETWORK } from '../lib/wallet';
 import { Logo } from './Logo';
 import { TokenIcon } from './TokenIcon';
-import { TokenCA } from './TokenCA';
 
 const env = import.meta.env;
 // Social links appear only when configured, so the footer never points at accounts that do not exist.
@@ -84,7 +83,6 @@ export function Footer() {
               <TokenIcon market="NEAR" size={16} /> Built on NEAR
             </span>
           </div>
-          <TokenCA compact />
           {SOCIALS.length > 0 && (
             <div className="foot2-socials">
               {SOCIALS.map((s) => (
