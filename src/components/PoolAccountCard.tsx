@@ -1,6 +1,19 @@
 import { useState } from 'react';
 import { usd } from '../lib/format';
-import { cancelWithdrawAction, depositAction, POOL_ID, refreshPool, requestWithdrawAction, USDC_ID, usePool } from '../lib/pool';
+import { useEffect } from 'react';
+import {
+  cancelWithdrawAction,
+  depositAction,
+  earlyDeposits,
+  POOL_ID,
+  poolCanReceiveUsdc,
+  preLaunchDepositAction,
+  recordEarlyDeposit,
+  refreshPool,
+  requestWithdrawAction,
+  USDC_ID,
+  usePool,
+} from '../lib/pool';
 import { useWallet } from '../lib/wallet';
 import { PromoCard } from './PromoCard';
 import { toast } from './Toasts';
@@ -16,14 +29,7 @@ export function PoolAccountCard() {
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState<number | null>(null);
 
-  if (pool.missing) {
-    return (
-      <section className="panel pad pool-card" id="pool">
-        <h2>USDC balance</h2>
-        <p className="muted">USDC deposits are not open yet. They open as soon as the Nitro trading contract is live on NEAR mainnet.</p>
-      </section>
-    );
-  }
+  if (pool.missing) return <EarlyDepositCard />;
 
   const n = Number(amount);
   const max = tab === 'deposit' ? pool.wallet : pool.balance;
@@ -125,6 +131,95 @@ export function PoolAccountCard() {
             : 'Withdrawals are reviewed by the Nitro team. The amount is locked while it waits, then sent to your NEAR wallet once approved. You can cancel any time before that.'}
         </p>
       </div>
+    </section>
+  );
+}
+
+/** Before the contract is live: deposits go straight to the pool account and are credited at launch. */
+function EarlyDepositCard() {
+  const { accountId, signAndSend } = useWallet();
+  const pool = usePool();
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [list, setList] = useState(() => (accountId ? earlyDeposits(accountId) : []));
+
+  useEffect(() => {
+    poolCanReceiveUsdc().then(setOpen);
+    setList(accountId ? earlyDeposits(accountId) : []);
+  }, [accountId]);
+
+  const n = Number(amount);
+  const valid = !!accountId && n >= 1 && n <= pool.wallet;
+  const total = list.reduce((s, d) => s + d.amount, 0);
+
+  const submit = async () => {
+    if (!valid || !accountId) return;
+    setBusy(true);
+    try {
+      await signAndSend(USDC_ID, [preLaunchDepositAction(n, accountId)]);
+      recordEarlyDeposit(accountId, { at: Date.now(), amount: n });
+      setList(earlyDeposits(accountId));
+      toast.ok(`Deposited ${usd(n)} USDC`);
+      setAmount('');
+      refreshPool();
+    } catch (e) {
+      toast.err((e as Error).message || 'Transaction cancelled');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel pad pool-card" id="pool">
+      <h2>USDC balance</h2>
+      <div className="pool-balances">
+        <div>
+          <span className="label">Deposited (early)</span>
+          <b className="mono">${usd(total)}</b>
+        </div>
+        <div>
+          <span className="label">In your wallet</span>
+          <b className="mono">${usd(pool.wallet)}</b>
+        </div>
+      </div>
+      <div className="field">
+        <div className="field-head">
+          <label htmlFor="early-amt">Amount to deposit</label>
+          <span className="muted">
+            Max <b className="mono">{usd(pool.wallet)}</b> USDC
+          </span>
+        </div>
+        <div className="input">
+          <input id="early-amt" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} />
+          <button className="chip" onClick={() => setAmount(String(Math.floor(pool.wallet * 1e6) / 1e6))}>
+            Max
+          </button>
+          <span className="unit">USDC</span>
+        </div>
+        <button className="btn btn-primary pool-go" disabled={!valid || busy || open === false} onClick={submit}>
+          {busy ? 'Confirm in your wallet…' : 'Deposit USDC'}
+        </button>
+        {n > 0 && n < 1 && <p className="hint err">Minimum deposit is 1 USDC.</p>}
+        {open === false && <p className="hint err">Deposits open in a moment: the Nitro account is being set up to receive USDC.</p>}
+        <p className="muted small">
+          Confirm one USDC transfer in your NEAR wallet. It is recorded on chain with your account, and lands in your trading balance as soon as
+          live trading opens. Withdrawals open at the same time.
+        </p>
+      </div>
+      {list.length > 0 && (
+        <div className="pool-requests">
+          <span className="label">Your early deposits</span>
+          {list.map((d, i) => (
+            <div key={i} className="pool-request early">
+              <span className="pending-dot" aria-hidden="true" />
+              <b className="mono">{usd(d.amount)} USDC</b>
+              <span className="muted small">{new Date(d.at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              <span className="muted small">credited at launch</span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

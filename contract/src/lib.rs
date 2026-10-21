@@ -90,6 +90,8 @@ pub struct Account {
     /// Wagers still needed before withdrawals unlock, and wagers counted so far.
     pub promo_wager_required: U128,
     pub promo_wagered: U128,
+    /// X (Twitter) username given when claiming the bonus, for the follow check.
+    pub x_handle: Option<String>,
 }
 
 /// Public trading stats for the leaderboard.
@@ -256,7 +258,7 @@ pub struct Contract {
     ledger: LookupMap<AccountId, Vec<LedgerEntry>>,
     withdraw_requests: IterableMap<u64, WithdrawRequest>,
     next_withdraw_id: u64,
-    /// USDC funded for bonuses (deposit with msg "promo"), not yet claimed.
+    /// Cap on bonuses still to be paid, in USDC. Bonuses come out of the vault; no USDC is sent in for them.
     promo_budget: u128,
     promo_claims: u32,
     /// Every account that has used the contract, in order of first use.
@@ -311,7 +313,7 @@ impl Contract {
             ledger: LookupMap::new(b"l"),
             withdraw_requests: IterableMap::new(b"w"),
             next_withdraw_id: 1,
-            promo_budget: 0,
+            promo_budget: 300_000_000, // 100 bonuses of 3 USDC
             promo_claims: 0,
             users: Vector::new(b"u"),
         }
@@ -346,12 +348,7 @@ impl Contract {
                 self.log(&sender_id, LedgerEntry::new("vault_deposit", amount));
                 env::log_str(&format!("EVENT_JSON:{{\"event\":\"vault_deposit\",\"account\":\"{}\",\"amount\":\"{}\",\"shares\":\"{}\"}}", sender_id, amount, shares));
             }
-            "promo" => {
-                // Funds the new-user bonus. This USDC can only be paid out as bonuses (or back by the owner).
-                self.promo_budget += amount;
-                self.log(&sender_id, LedgerEntry::new("promo_fund", amount));
-            }
-            _ => env::panic_str("Unknown msg: use \"\" to trade, \"vault\" to provide liquidity or \"promo\" to fund bonuses"),
+            _ => env::panic_str("Unknown msg: use \"\" to trade or \"vault\" to provide liquidity"),
         }
         self.accounts.insert(sender_id, acct);
         self.accounted += amount;
@@ -359,25 +356,39 @@ impl Contract {
     }
 
     /// Withdraw free trading balance.
-    /// Claim the new-user bonus: requires `promo_min_deposit` of deposits, once per account.
-    /// The whole balance stays locked for withdrawals until the turnover is reached.
-    pub fn claim_promo(&mut self) -> U128 {
+    /// Claim the new-user bonus: requires `promo_min_deposit` of deposits and the user's X username
+    /// (they must follow the project on X; the owner checks that when reviewing withdrawals).
+    /// Once per account; not for the owner or the contract account. The bonus is paid from the vault,
+    /// up to the promo cap. The whole balance stays locked for withdrawals until the turnover is reached.
+    pub fn claim_promo(&mut self, x_handle: String) -> U128 {
         let who = env::predecessor_account_id();
+        require!(who != self.owner && who != env::current_account_id(), "The team wallet cannot claim the bonus");
+        let handle = x_handle.trim().trim_start_matches('@').to_string();
+        require!(
+            !handle.is_empty() && handle.len() <= 15 && handle.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+            "Enter your X username"
+        );
         let mut acct = self.account(&who);
         let amount = self.config.promo_amount.0;
         require!(amount > 0, "There is no promo right now");
         require!(!acct.promo_claimed, "You already claimed the bonus");
         require!(acct.total_deposited.0 >= self.config.promo_min_deposit.0, "Deposit the minimum first to claim the bonus");
-        require!(self.promo_budget >= amount, "The promo budget is used up");
+        require!(self.promo_budget >= amount, "The promo is fully claimed");
+        require!(self.liquidity - self.reserved >= amount, "The vault cannot pay bonuses right now");
         self.promo_budget -= amount;
         self.promo_claims += 1;
+        // Paid from the vault: USDC already in the contract, so the books stay balanced.
+        self.liquidity -= amount;
+        acct.x_handle = Some(handle.clone());
         acct.balance = U128(acct.balance.0 + amount);
         acct.promo_claimed = true;
         acct.promo_bonus = U128(amount);
         acct.promo_wager_required = U128(amount * self.config.promo_wager_multiple as u128);
         acct.promo_wagered = U128(0);
         self.accounts.insert(who.clone(), acct);
-        self.log(&who, LedgerEntry::new("promo_bonus", amount));
+        let mut e = LedgerEntry::new("promo_bonus", amount);
+        e.reason = Some(format!("@{}", handle));
+        self.log(&who, e);
         U128(amount)
     }
 
@@ -410,13 +421,10 @@ impl Contract {
         }
     }
 
-    /// Owner: take unclaimed promo budget back.
-    pub fn withdraw_promo_budget(&mut self, amount: U128) -> Promise {
+    /// Owner: set how much more (in USDC) may be paid out as bonuses. Nothing is transferred.
+    pub fn set_promo_budget(&mut self, budget: U128) {
         self.assert_owner();
-        require!(amount.0 > 0 && amount.0 <= self.promo_budget, "Not enough promo budget");
-        self.promo_budget -= amount.0;
-        let owner = self.owner.clone();
-        self.send_usdc(owner, amount.0)
+        self.promo_budget = budget.0;
     }
 
     /// Ask to withdraw free balance. The amount is locked until the owner approves (USDC is sent)

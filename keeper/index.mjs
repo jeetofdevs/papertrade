@@ -152,14 +152,24 @@ async function creditTxs(list) {
   return done;
 }
 
+let backfilled = false;
+
+/** Newest transfers first. The first run reads the whole history (deposits made before launch);
+ * later runs stop at the first page with nothing new. */
 async function scanDeposits() {
   const headers = NEARBLOCKS_KEY ? { Authorization: `Bearer ${NEARBLOCKS_KEY}` } : {};
-  const r = await getJson(`${NEARBLOCKS}/v1/account/${CONTRACT}/ft-txns?per_page=50&order=desc`, headers);
-  const fresh = (r?.txns ?? [])
-    .filter((t) => (t.ft?.contract ?? USDC) === USDC && t.transaction_hash && !seenTx.has(t.transaction_hash))
-    .map((t) => ({ hash: t.transaction_hash, signer: undefined }));
-  const unique = [...new Map(fresh.map((t) => [t.hash, t])).values()];
-  if (unique.length) await creditTxs(unique);
+  const maxPages = backfilled ? 5 : Number(env('BACKFILL_PAGES', 100));
+  for (let page = 1; page <= maxPages; page++) {
+    const r = await getJson(`${NEARBLOCKS}/v1/account/${CONTRACT}/ft-txns?page=${page}&per_page=50&order=desc`, headers);
+    const txns = r?.txns ?? [];
+    const fresh = txns
+      .filter((t) => (t.ft?.contract ?? USDC) === USDC && t.transaction_hash && !seenTx.has(t.transaction_hash))
+      .map((t) => ({ hash: t.transaction_hash, signer: undefined }));
+    const unique = [...new Map(fresh.map((t) => [t.hash, t])).values()];
+    if (unique.length) await creditTxs(unique);
+    if (txns.length < 50 || (backfilled && unique.length === 0)) break;
+  }
+  backfilled = true;
 }
 
 // ---------- HTTP: health + manual claim ----------

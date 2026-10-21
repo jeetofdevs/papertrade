@@ -5,11 +5,10 @@ import { toast } from '../components/Toasts';
 import { usd } from '../lib/format';
 import {
   approveWithdrawAction,
-  fundPromoAction,
+  setPromoBudgetAction,
   isAdmin,
   loadPromo,
   Promo,
-  USDC_ID,
   loadAllRequests,
   loadUserSummary,
   POOL_ID,
@@ -87,11 +86,11 @@ export function Admin() {
 
   const addFunds = async () => {
     const n = Number(fund);
-    if (!(n > 0)) return;
+    if (!(n >= 0) || fund === '') return;
     setBusy(-1);
     try {
-      await signAndSend(USDC_ID, [fundPromoAction(n)]);
-      toast.ok(`Added ${usd(n)} USDC to the promo budget`);
+      await signAndSend(POOL_ID, [setPromoBudgetAction(n)]);
+      toast.ok(`Promo cap set to ${usd(n)} USDC (${Math.floor(n / (promo?.amount || 3))} bonuses)`);
       setFund('');
       await load();
     } catch (e) {
@@ -122,17 +121,17 @@ export function Admin() {
           <h3>New-user bonus</h3>
           <p className="muted small">
             {promo
-              ? `${usd(promo.amount)} USDC after a ${usd(promo.minDeposit)} USDC deposit, ${promo.multiple}x turnover. ${promo.claims} claimed · budget left ${usd(promo.budget)} USDC (${Math.floor(promo.budget / (promo.amount || 1))} bonuses).`
+              ? `${usd(promo.amount)} USDC after a ${usd(promo.minDeposit)} USDC deposit and following @nitroonnear on X, ${promo.multiple}x turnover. Paid from the vault, no transfer needed. ${promo.claims} claimed · ${usd(promo.budget)} USDC left (${Math.floor(promo.budget / (promo.amount || 1))} bonuses).`
               : 'Loading…'}
           </p>
         </div>
         <div className="admin-fund">
           <div className="input">
-            <input inputMode="decimal" placeholder="Amount" value={fund} onChange={(e) => setFund(e.target.value.replace(/[^0-9.]/g, ''))} />
+            <input inputMode="decimal" placeholder="New cap" value={fund} onChange={(e) => setFund(e.target.value.replace(/[^0-9.]/g, ''))} />
             <span className="unit">USDC</span>
           </div>
-          <button className="btn btn-primary" disabled={!(Number(fund) > 0) || busy === -1} onClick={addFunds}>
-            Fund promo
+          <button className="btn btn-primary" disabled={fund === '' || busy === -1} onClick={addFunds}>
+            Set promo cap
           </button>
         </div>
       </section>
@@ -153,6 +152,7 @@ export function Admin() {
                   <th>Requested</th>
                   <th>Deposited · withdrawn</th>
                   <th>Trades · PnL</th>
+                  <th>X (follow check)</th>
                   <th>Reject reason</th>
                   <th />
                 </tr>
@@ -170,6 +170,15 @@ export function Admin() {
                       <td className="muted">{new Date(r.requestedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}</td>
                       <td className="mono">{u ? `${usd(u.deposited)} · ${usd(u.withdrawn)}` : '—'}</td>
                       <td className={`mono ${u && u.profit - u.loss < 0 ? 'down' : 'up'}`}>{u ? `${u.trades} · ${usd(u.profit - u.loss)}` : '—'}</td>
+                      <td>
+                        {u?.xHandle ? (
+                          <a href={`https://x.com/${u.xHandle}`} target="_blank" rel="noopener noreferrer">
+                            @{u.xHandle} ↗
+                          </a>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
                       <td>
                         <input
                           className="admin-reason"

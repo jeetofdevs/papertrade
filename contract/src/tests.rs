@@ -478,8 +478,7 @@ fn cannot_request_more_than_balance() {
 }
 
 fn promo_setup() -> T {
-    let mut t = setup();
-    t.deposit("owner.near", 300, "promo"); // budget for 100 bonuses
+    let mut t = setup(); // default promo cap: 300 USDC
     t.deposit("bob.near", 2, "");
     t
 }
@@ -489,14 +488,16 @@ fn bonus_needs_a_deposit_and_is_claimed_once() {
     let mut t = promo_setup();
     assert_eq!(t.c.get_promo().budget.0, 300 * USDC);
     t.as_("bob.near");
-    assert_eq!(t.c.claim_promo().0, 3 * USDC);
+    assert_eq!(t.c.claim_promo("bob_x".into()).0, 3 * USDC);
     let a = t.c.get_account(acc("bob.near"));
     assert_eq!(a.balance.0, 5 * USDC);
     assert_eq!(a.promo_wager_required.0, 60 * USDC);
     assert_eq!(t.c.get_promo().budget.0, 297 * USDC);
     assert_eq!(t.c.get_ledger(acc("bob.near"), None, Some(1))[0].kind, "promo_bonus");
-    // Promo USDC is accounted for: the books still balance.
-    assert_eq!(t.c.get_pool().accounted.0, (1_000_000 + 1_000 + 300 + 2) * USDC);
+    // Paid from the vault; no USDC came in, so the books still balance.
+    assert_eq!(t.c.get_vault().liquidity.0, (1_000_000 - 3) * USDC);
+    assert_eq!(t.c.get_pool().accounted.0, (1_000_000 + 1_000 + 2) * USDC);
+    assert_eq!(t.c.get_account(acc("bob.near")).x_handle.as_deref(), Some("bob_x"));
 }
 
 #[test]
@@ -504,8 +505,8 @@ fn bonus_needs_a_deposit_and_is_claimed_once() {
 fn bonus_only_once() {
     let mut t = promo_setup();
     t.as_("bob.near");
-    t.c.claim_promo();
-    t.c.claim_promo();
+    t.c.claim_promo("bob_x".into());
+    t.c.claim_promo("bob_x".into());
 }
 
 #[test]
@@ -514,16 +515,43 @@ fn bonus_needs_min_deposit() {
     let mut t = promo_setup();
     t.deposit("carol.near", 1, "");
     t.as_("carol.near");
-    t.c.claim_promo();
+    t.c.claim_promo("bob_x".into());
 }
 
 #[test]
-#[should_panic(expected = "budget is used up")]
-fn bonus_needs_budget() {
+#[should_panic(expected = "fully claimed")]
+fn bonus_respects_the_cap() {
     let mut t = setup();
+    t.as_("owner.near");
+    t.c.set_promo_budget(U128(0));
     t.deposit("bob.near", 2, "");
     t.as_("bob.near");
-    t.c.claim_promo();
+    t.c.claim_promo("bob_x".into());
+}
+
+#[test]
+#[should_panic(expected = "team wallet")]
+fn owner_cannot_claim_the_bonus() {
+    let mut t = setup();
+    t.deposit("owner.near", 5, "");
+    t.as_("owner.near");
+    t.c.claim_promo("dev".into());
+}
+
+#[test]
+#[should_panic(expected = "Enter your X username")]
+fn bonus_needs_an_x_username() {
+    let mut t = promo_setup();
+    t.as_("bob.near");
+    t.c.claim_promo("not a handle!".into());
+}
+
+#[test]
+fn x_username_accepts_the_at_sign() {
+    let mut t = promo_setup();
+    t.as_("bob.near");
+    t.c.claim_promo(" @Bob_X ".into());
+    assert_eq!(t.c.get_account(acc("bob.near")).x_handle.as_deref(), Some("Bob_X"));
 }
 
 #[test]
@@ -531,7 +559,7 @@ fn bonus_needs_budget() {
 fn withdrawals_locked_until_turnover() {
     let mut t = promo_setup();
     t.as_("bob.near");
-    t.c.claim_promo();
+    t.c.claim_promo("bob_x".into());
     t.c.request_withdraw(U128(USDC));
 }
 
@@ -540,7 +568,7 @@ fn turnover_unlocks_withdrawals_and_quick_flips_do_not_count() {
     let mut t = promo_setup();
     t.deposit("bob.near", 100, "");
     t.as_("bob.near");
-    t.c.claim_promo();
+    t.c.claim_promo("bob_x".into());
     // Opened and closed within the same minute: does not count.
     let id = t.c.open_position("NEAR".into(), true, U128(50 * USDC), 1, None, None);
     t.later(10);
@@ -568,7 +596,7 @@ fn turnover_unlocks_withdrawals_and_quick_flips_do_not_count() {
 fn bonus_ends_when_the_balance_is_gone() {
     let mut t = promo_setup();
     t.as_("bob.near");
-    t.c.claim_promo();
+    t.c.claim_promo("bob_x".into());
     let id = t.c.open_position("NEAR".into(), true, U128(5 * USDC), 1000, None, None);
     t.later(5);
     t.price("NEAR", 2 * P);

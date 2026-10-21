@@ -3847,3 +3847,9 @@ html.uwuless .chart-scene .sky-comet {
 .admin-promo p { margin: 0; }
 .admin-fund { display: flex; gap: 8px; align-items: center; }
 .admin-fund .input { width: 180px; }
+.promo-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: step; }
+.promo-steps li { counter-increment: step; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.promo-steps li::before { content: counter(step); flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; background: var(--panel-2); color: var(--muted); }
+.promo-steps li.done::before { content: '✓'; background: var(--mint); color: #03130d; }
+.promo-steps li > span:first-of-type { flex: 1; }
+.promo-handle { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 13px; }

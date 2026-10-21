@@ -76,6 +76,7 @@ interface RawAccount {
   promo_bonus?: string;
   promo_wager_required?: string;
   promo_wagered?: string;
+  x_handle?: string | null;
 }
 interface RawPromo {
   amount: string;
@@ -177,7 +178,6 @@ export interface LedgerItem {
     | 'promo_bonus'
     | 'promo_unlocked'
     | 'promo_ended'
-    | 'promo_fund'
     | 'refund'
     | 'vault_deposit'
     | 'vault_withdraw'
@@ -391,7 +391,10 @@ async function load() {
     });
   } catch (e) {
     const missing = e instanceof RpcError && e.missing;
-    set({ ...state, ready: true, missing, error: missing ? null : (e as Error).message });
+    // Before launch, still show the USDC in the user's wallet so they can deposit early.
+    const wallet = missing ? await view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).then(fromUsdc, () => state.wallet) : state.wallet;
+    if (id !== account) return;
+    set({ ...state, ready: true, missing, wallet, error: missing ? null : (e as Error).message });
   }
 }
 
@@ -457,6 +460,43 @@ const call = (methodName: string, args: object, tgas: number, deposit = '0'): Wa
   params: { methodName, args, gas: `${tgas}${TGAS}`, deposit },
 });
 
+// ---------- Deposits before the contract is live ----------
+// Users can already send USDC to the pool account. Each transfer carries "nitro:<account>" in its memo,
+// and once the contract is deployed the keeper credits every such transfer to that account (each only once).
+
+/** Plain USDC transfer to the pool account, for before the contract is live. */
+export const preLaunchDepositAction = (usd: number, accountId: string): WalletAction =>
+  call('ft_transfer', { receiver_id: POOL_ID, amount: toUsdc(usd), memo: `nitro:${accountId}` }, 30, '1');
+
+/** Can the pool account receive USDC (is it registered on the USDC contract)? */
+export async function poolCanReceiveUsdc(): Promise<boolean> {
+  try {
+    return (await view<unknown>(USDC_ID, 'storage_balance_of', { account_id: POOL_ID })) != null;
+  } catch {
+    return false;
+  }
+}
+
+export interface EarlyDeposit {
+  at: number;
+  amount: number;
+}
+const earlyKey = (id: string) => `nitro:early-deposits:${id}`;
+export function earlyDeposits(accountId: string): EarlyDeposit[] {
+  try {
+    return JSON.parse(localStorage.getItem(earlyKey(accountId)) || '[]');
+  } catch {
+    return [];
+  }
+}
+export function recordEarlyDeposit(accountId: string, d: EarlyDeposit) {
+  try {
+    localStorage.setItem(earlyKey(accountId), JSON.stringify([d, ...earlyDeposits(accountId)].slice(0, 100)));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Deposit: one ft_transfer_call to the pool contract, credited to the sender's balance by the contract. */
 export const depositAction = (usd: number): WalletAction =>
   call('ft_transfer_call', { receiver_id: POOL_ID, amount: toUsdc(usd), msg: '' }, 100, '1');
@@ -467,10 +507,11 @@ export const cancelWithdrawAction = (id: number) => call('cancel_withdraw', { id
 export const approveWithdrawAction = (id: number) => call('approve_withdraw', { id }, 60);
 export const rejectWithdrawAction = (id: number, reason: string) => call('reject_withdraw', { id, reason: reason || null }, 30);
 
-export const claimPromoAction = () => call('claim_promo', {}, 30);
-/** Owner: add USDC to the bonus budget (sent from the owner's wallet). */
-export const fundPromoAction = (usd: number): WalletAction =>
-  call('ft_transfer_call', { receiver_id: POOL_ID, amount: toUsdc(usd), msg: 'promo' }, 100, '1');
+/** The project's X account users must follow to claim the bonus. */
+export const X_ACCOUNT = (import.meta.env.VITE_X_ACCOUNT as string | undefined) || 'nitroonnear';
+export const claimPromoAction = (xHandle: string) => call('claim_promo', { x_handle: xHandle.trim().replace(/^@/, '') }, 30);
+/** Owner: set how much more may be paid out as bonuses (a cap; no USDC is sent). */
+export const setPromoBudgetAction = (usd: number) => call('set_promo_budget', { budget: toUsdc(usd) }, 30);
 
 export interface LeaderRow {
   account: string;
@@ -513,6 +554,7 @@ export async function loadUserSummary(accountId: string) {
     profit: fromUsdc(a.profit),
     loss: fromUsdc(a.loss),
     trades: a.trades ?? 0,
+    xHandle: a.x_handle ?? null,
   };
 }
 

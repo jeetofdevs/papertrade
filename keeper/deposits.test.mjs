@@ -7,9 +7,14 @@ const ev = (data) => `EVENT_JSON:${JSON.stringify({ standard: 'nep141', version:
 const tx = (outcomes) => ({ transaction: { hash: 'H1' }, receipts_outcome: outcomes });
 const rc = (id, executor_id, logs, status = { SuccessValue: '' }) => ({ id, outcome: { executor_id, logs, status } });
 
-test('plain transfer is credited to the sender', () => {
-  const r = parseDeposits(tx([rc('R1', 'usdc.near', [ev([{ old_owner_id: 'bob.near', new_owner_id: 'nitro.near', amount: '5000000' }])])]), cfg);
+test('tagged transfer is credited to the account in the memo', () => {
+  const r = parseDeposits(tx([rc('R1', 'usdc.near', [ev([{ old_owner_id: 'bob.near', new_owner_id: 'nitro.near', amount: '5000000', memo: 'nitro:bob.near' }])])]), cfg);
   assert.deepEqual(r, [{ key: 'H1:R1:0:0', account: 'bob.near', amount: '5000000' }]);
+});
+
+test('untagged transfers are not user deposits', () => {
+  const r = parseDeposits(tx([rc('R1', 'usdc.near', [ev([{ old_owner_id: 'team.near', new_owner_id: 'nitro.near', amount: '5000000' }])])]), cfg);
+  assert.deepEqual(r, []);
 });
 
 test('memo names the account to credit', () => {
@@ -20,15 +25,15 @@ test('memo names the account to credit', () => {
   assert.equal(r[0].account, 'alice.near');
 });
 
-test('bad memo falls back to the sender', () => {
+test('other memos are ignored', () => {
   const r = parseDeposits(tx([rc('R1', 'usdc.near', [ev([{ old_owner_id: 'bob.near', new_owner_id: 'nitro.near', amount: '7', memo: 'thanks!!' }])])]), cfg);
-  assert.equal(r[0].account, 'bob.near');
+  assert.deepEqual(r, []);
 });
 
 test('ft_transfer_call deposits are skipped', () => {
   const r = parseDeposits(
     tx([
-      rc('R1', 'usdc.near', [ev([{ old_owner_id: 'bob.near', new_owner_id: 'nitro.near', amount: '5' }])]),
+      rc('R1', 'usdc.near', [ev([{ old_owner_id: 'bob.near', new_owner_id: 'nitro.near', amount: '5', memo: 'nitro:bob.near' }])]),
       rc('R2', 'nitro.near', ['EVENT_JSON:{"event":"deposit"}']),
     ]),
     cfg,
@@ -39,9 +44,9 @@ test('ft_transfer_call deposits are skipped', () => {
 test('failed receipts, other tokens and other receivers are ignored', () => {
   const r = parseDeposits(
     tx([
-      rc('R1', 'usdc.near', [ev([{ old_owner_id: 'a.near', new_owner_id: 'nitro.near', amount: '5' }])], { Failure: {} }),
-      rc('R2', 'fake.near', [ev([{ old_owner_id: 'a.near', new_owner_id: 'nitro.near', amount: '5' }])]),
-      rc('R3', 'usdc.near', [ev([{ old_owner_id: 'a.near', new_owner_id: 'other.near', amount: '5' }])]),
+      rc('R1', 'usdc.near', [ev([{ old_owner_id: 'a.near', new_owner_id: 'nitro.near', amount: '5', memo: 'nitro:a.near' }])], { Failure: {} }),
+      rc('R2', 'fake.near', [ev([{ old_owner_id: 'a.near', new_owner_id: 'nitro.near', amount: '5', memo: 'nitro:a.near' }])]),
+      rc('R3', 'usdc.near', [ev([{ old_owner_id: 'a.near', new_owner_id: 'other.near', amount: '5', memo: 'nitro:a.near' }])]),
       rc('R4', 'usdc.near', ['not json', 'EVENT_JSON:{broken']),
     ]),
     cfg,
@@ -50,11 +55,12 @@ test('failed receipts, other tokens and other receivers are ignored', () => {
 });
 
 test('memo validation', () => {
-  assert.equal(memoAccount('alice.near'), 'alice.near');
-  assert.equal(memoAccount('a'), null);
-  assert.equal(memoAccount('has space.near'), null);
+  assert.equal(memoAccount('nitro:alice.near'), 'alice.near');
+  assert.equal(memoAccount('alice.near'), null);
+  assert.equal(memoAccount('nitro:a'), null);
+  assert.equal(memoAccount('nitro:has space.near'), null);
   assert.equal(memoAccount(undefined), null);
-  assert.equal(memoAccount('17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1'), '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1');
+  assert.equal(memoAccount('nitro:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1'), '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1');
 });
 
 test('prices convert to 8 decimals exactly', () => {

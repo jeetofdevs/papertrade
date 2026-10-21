@@ -3,10 +3,12 @@
 
 const ACCOUNT_RE = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 
-/** A NEAR account id written in a transfer memo ("alice.near" or "nitro:alice.near"), or null. */
+/** The NEAR account in a Nitro deposit memo ("nitro:alice.near"), or null for any other memo. */
 export function memoAccount(memo) {
   if (typeof memo !== 'string') return null;
-  const id = memo.trim().toLowerCase().replace(/^nitro:/, '');
+  const m = /^\s*nitro:(.+)$/i.exec(memo);
+  if (!m) return null;
+  const id = m[1].trim().toLowerCase();
   if (id.length < 2 || id.length > 64 || !ACCOUNT_RE.test(id)) return null;
   return id;
 }
@@ -16,7 +18,7 @@ function succeeded(status) {
 }
 
 /**
- * Plain transfers to `pool` in a transaction (RPC `EXPERIMENTAL_tx_status` / `tx` result).
+ * Nitro deposits made as plain transfers to `pool` in a transaction (RPC `EXPERIMENTAL_tx_status` / `tx` result).
  * Transfers made with ft_transfer_call are skipped: the contract already credited those itself.
  * Returns [{ key, account, amount }] where amount is a base-unit string.
  */
@@ -42,11 +44,11 @@ export function parseDeposits(tx, { pool, usdc }) {
       if (ev.standard !== 'nep141' || ev.event !== 'ft_transfer' || !Array.isArray(ev.data)) return;
       ev.data.forEach((d, di) => {
         if (d.new_owner_id !== pool || !/^\d+$/.test(String(d.amount)) || BigInt(d.amount) === 0n) return;
-        out.push({
-          key: `${hash}:${o.id}:${li}:${di}`,
-          account: memoAccount(d.memo) ?? d.old_owner_id,
-          amount: String(d.amount),
-        });
+        // Only transfers tagged by the Nitro site ("nitro:<account>") are user deposits. Anything else
+        // sent to the pool account (for example the team moving its own funds) is left alone.
+        const account = memoAccount(d.memo);
+        if (!account) return;
+        out.push({ key: `${hash}:${o.id}:${li}:${di}`, account, amount: String(d.amount) });
       });
     });
   }
