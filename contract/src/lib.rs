@@ -24,6 +24,8 @@ use near_sdk::{
 pub const PRICE_DECIMALS: u128 = 100_000_000;
 const BPS: u128 = 10_000;
 const NANOS: u64 = 1_000_000_000;
+/// Each user keeps their most recent history entries on chain.
+pub const LEDGER_MAX: usize = 100;
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -43,6 +45,10 @@ pub struct Config {
     /// NITRO points (6 decimals) minted per 1 USDC lost.
     pub nitro_per_usdc: u32,
     pub markets: Vec<String>,
+    /// Price spread charged on opens and closes, in basis points (0 = trade at the oracle price).
+    pub spread_bps: u32,
+    /// Smallest trading deposit, in USDC base units.
+    pub min_deposit: U128,
 }
 
 #[near(serializers = [borsh, json])]
@@ -60,6 +66,56 @@ pub struct Account {
     pub nitro: U128,
     pub vault_shares: U128,
     pub position_ids: Vec<u64>,
+    /// Lifetime totals, all in USDC base units.
+    pub total_deposited: U128,
+    pub total_withdrawn: U128,
+    pub volume: U128,
+    pub profit: U128,
+    pub loss: U128,
+    pub trades: u32,
+}
+
+/// One line in a user's history: deposits, withdrawals, opens and closes.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct LedgerEntry {
+    /// deposit | withdraw | refund | vault_deposit | vault_withdraw | open | close
+    pub kind: String,
+    /// USDC moved: the deposit, the withdrawal, the wager on open, or the payout on close.
+    pub amount: U128,
+    /// Milliseconds since the Unix epoch.
+    pub at: u64,
+    pub position_id: Option<u64>,
+    pub market: Option<String>,
+    pub long: Option<bool>,
+    pub leverage: Option<u32>,
+    /// Entry price on open, exit price on close.
+    pub price: Option<U128>,
+    /// Profit or loss on close, as a signed integer string.
+    pub pnl: Option<String>,
+    pub fee: Option<U128>,
+    pub nitro: Option<U128>,
+    /// close | max_loss | take_profit
+    pub reason: Option<String>,
+}
+
+impl LedgerEntry {
+    fn new(kind: &str, amount: u128) -> Self {
+        Self {
+            kind: kind.into(),
+            amount: U128(amount),
+            at: env::block_timestamp_ms(),
+            position_id: None,
+            market: None,
+            long: None,
+            leverage: None,
+            price: None,
+            pnl: None,
+            fee: None,
+            nitro: None,
+            reason: None,
+        }
+    }
 }
 
 #[near(serializers = [borsh, json])]
@@ -145,6 +201,7 @@ pub struct Contract {
     /// When the running credit check started (0 = none). A stuck check expires after 5 minutes.
     credit_pending: u64,
     credited: LookupSet<String>,
+    ledger: LookupMap<AccountId, Vec<LedgerEntry>>,
 }
 
 fn mul_div(a: u128, b: u128, c: u128) -> u128 {
@@ -171,6 +228,8 @@ impl Contract {
                 max_open_positions: 10,
                 nitro_per_usdc: 10,
                 markets: vec!["NEAR".into(), "BTC".into(), "ETH".into(), "SOL".into()],
+                spread_bps: 0,
+                min_deposit: U128(1_000_000),
             },
             accounts: LookupMap::new(b"a"),
             positions: LookupMap::new(b"p"),
@@ -186,6 +245,7 @@ impl Contract {
             out_seq: 0,
             credit_pending: 0,
             credited: LookupSet::new(b"c"),
+            ledger: LookupMap::new(b"l"),
         }
     }
 
@@ -199,7 +259,10 @@ impl Contract {
         let mut acct = self.account_or_default(&sender_id);
         match msg.as_str() {
             "" | "trade" => {
+                require!(amount >= self.config.min_deposit.0, "Deposit below the minimum");
                 acct.balance = U128(acct.balance.0 + amount);
+                acct.total_deposited = U128(acct.total_deposited.0 + amount);
+                self.log(&sender_id, LedgerEntry::new("deposit", amount));
                 env::log_str(&format!("EVENT_JSON:{{\"event\":\"deposit\",\"account\":\"{}\",\"amount\":\"{}\"}}", sender_id, amount));
             }
             "vault" => {
@@ -212,6 +275,7 @@ impl Contract {
                 self.liquidity += amount;
                 self.total_shares += shares;
                 acct.vault_shares = U128(acct.vault_shares.0 + shares);
+                self.log(&sender_id, LedgerEntry::new("vault_deposit", amount));
                 env::log_str(&format!("EVENT_JSON:{{\"event\":\"vault_deposit\",\"account\":\"{}\",\"amount\":\"{}\",\"shares\":\"{}\"}}", sender_id, amount, shares));
             }
             _ => env::panic_str("Unknown msg: use \"\" to trade or \"vault\" to provide liquidity"),
@@ -227,7 +291,9 @@ impl Contract {
         let mut acct = self.account(&who);
         require!(amount.0 > 0 && amount.0 <= acct.balance.0, "Not enough free balance");
         acct.balance = U128(acct.balance.0 - amount.0);
+        acct.total_withdrawn = U128(acct.total_withdrawn.0 + amount.0);
         self.accounts.insert(who.clone(), acct);
+        self.log(&who, LedgerEntry::new("withdraw", amount.0));
         self.send_usdc(who, amount.0)
     }
 
@@ -242,6 +308,7 @@ impl Contract {
         self.total_shares -= shares.0;
         self.liquidity -= amount;
         self.accounts.insert(who.clone(), acct);
+        self.log(&who, LedgerEntry::new("vault_withdraw", amount));
         self.send_usdc(who, amount)
     }
 
@@ -254,7 +321,8 @@ impl Contract {
             // Transfer failed (for example the account is not registered on USDC): credit it back.
             let mut acct = self.account_or_default(&account);
             acct.balance = U128(acct.balance.0 + amount.0);
-            self.accounts.insert(account, acct);
+            self.accounts.insert(account.clone(), acct);
+            self.log(&account, LedgerEntry::new("refund", amount.0));
         }
     }
 
@@ -297,7 +365,9 @@ impl Contract {
             }
             let mut acct = self.account_or_default(&c.account);
             acct.balance = U128(acct.balance.0 + c.amount.0);
+            acct.total_deposited = U128(acct.total_deposited.0 + c.amount.0);
             self.accounts.insert(c.account.clone(), acct);
+            self.log(&c.account, LedgerEntry::new("deposit", c.amount.0));
             self.accounted += c.amount.0;
             env::log_str(&format!(
                 "EVENT_JSON:{{\"event\":\"deposit\",\"account\":\"{}\",\"amount\":\"{}\",\"key\":\"{}\"}}",
@@ -329,7 +399,17 @@ impl Contract {
     // ---------- Trading ----------
 
     /// Open a position. `tp_roe_bps` is the take profit as a return on the wager (10000 = +100%).
-    pub fn open_position(&mut self, market: String, long: bool, wager: U128, leverage: u32, tp_roe_bps: Option<u32>) -> u64 {
+    /// `acceptable_price` is the trader's slippage limit: the worst entry they accept
+    /// (highest for a long, lowest for a short).
+    pub fn open_position(
+        &mut self,
+        market: String,
+        long: bool,
+        wager: U128,
+        leverage: u32,
+        tp_roe_bps: Option<u32>,
+        acceptable_price: Option<U128>,
+    ) -> u64 {
         require!(!self.paused, "New positions are paused");
         require!(self.config.markets.contains(&market), "Unknown market");
         require!(leverage >= 1 && leverage <= self.config.max_leverage, "Leverage out of range");
@@ -342,7 +422,10 @@ impl Contract {
 
         let size = wager * leverage as u128;
         require!(size <= mul_div(self.liquidity, self.config.max_position_bps as u128, BPS), "Position too large for the vault");
-        let entry = self.fresh_price(&market);
+        let entry = self.with_spread(self.fresh_price(&market), long);
+        if let Some(limit) = acceptable_price {
+            require!(if long { entry <= limit.0 } else { entry >= limit.0 }, "Price moved beyond your slippage limit");
+        }
 
         // Reserve the most this position can be paid.
         let max_profit = wager * self.config.max_profit_multiple as u128;
@@ -375,6 +458,14 @@ impl Contract {
         };
         acct.balance = U128(acct.balance.0 - wager);
         acct.position_ids.push(id);
+        acct.volume = U128(acct.volume.0 + size);
+        let mut e = LedgerEntry::new("open", wager);
+        e.position_id = Some(id);
+        e.market = Some(pos.market.clone());
+        e.long = Some(long);
+        e.leverage = Some(leverage);
+        e.price = Some(U128(entry));
+        self.log(&who, e);
         self.reserved += reserve;
         self.open_interest += size;
         env::log_str(&format!(
@@ -386,8 +477,9 @@ impl Contract {
         id
     }
 
-    /// Close your own position at the current oracle price.
-    pub fn close_position(&mut self, id: u64) -> CloseResult {
+    /// Close your own position at the current oracle price (minus the spread).
+    /// `acceptable_price` is the worst exit you accept (lowest for a long, highest for a short).
+    pub fn close_position(&mut self, id: u64, acceptable_price: Option<U128>) -> CloseResult {
         let pos = self.positions.get(&id).expect("Position not found").clone();
         require!(env::predecessor_account_id() == pos.owner, "Not your position");
         let mark = self.fresh_price(&pos.market);
@@ -397,7 +489,11 @@ impl Contract {
         } else if Self::crossed_tp(&pos, mark) {
             (pos.tp.unwrap().0, "take_profit")
         } else {
-            (mark, "close")
+            let exit = self.with_spread(mark, !pos.long);
+            if let Some(limit) = acceptable_price {
+                require!(if pos.long { exit >= limit.0 } else { exit <= limit.0 }, "Price moved beyond your slippage limit");
+            }
+            (exit, "close")
         };
         self.settle(pos, exit, reason)
     }
@@ -451,6 +547,14 @@ impl Contract {
         (from_id.max(1)..end).filter_map(|id| self.positions.get(&id).cloned()).collect()
     }
 
+    /// A user's history, newest first.
+    pub fn get_ledger(&self, account_id: AccountId, from_index: Option<u32>, limit: Option<u32>) -> Vec<LedgerEntry> {
+        let list = self.ledger.get(&account_id).cloned().unwrap_or_default();
+        let from = from_index.unwrap_or(0) as usize;
+        let limit = limit.unwrap_or(50).min(100) as usize;
+        list.iter().rev().skip(from).take(limit).cloned().collect()
+    }
+
     pub fn get_pool(&self) -> PoolView {
         PoolView {
             deposit_address: env::current_account_id(),
@@ -486,6 +590,7 @@ impl Contract {
         self.assert_owner();
         require!(config.max_leverage >= 1 && config.max_profit_multiple >= 1, "Bad config");
         require!(config.profit_fee_bps <= 5000 && config.max_position_bps <= 2000, "Limits too high");
+        require!(config.spread_bps <= 100, "Spread too high");
         self.config = config;
     }
 
@@ -511,6 +616,25 @@ impl Contract {
 }
 
 impl Contract {
+    fn log(&mut self, who: &AccountId, e: LedgerEntry) {
+        let mut list = self.ledger.get(who).cloned().unwrap_or_default();
+        list.push(e);
+        if list.len() > LEDGER_MAX {
+            let extra = list.len() - LEDGER_MAX;
+            list.drain(..extra);
+        }
+        self.ledger.insert(who.clone(), list);
+    }
+
+    /// Price after the spread: buying pays a little more, selling gets a little less.
+    fn with_spread(&self, mark: u128, buy: bool) -> u128 {
+        let s = self.config.spread_bps as u128;
+        if s == 0 {
+            return mark;
+        }
+        if buy { mul_div(mark, BPS + s, BPS) } else { mul_div(mark, BPS - s, BPS) }
+    }
+
     fn assert_owner(&self) {
         require!(env::predecessor_account_id() == self.owner, "Only the owner");
     }
@@ -559,19 +683,37 @@ impl Contract {
         let mut acct = self.account_or_default(&pos.owner);
         let wager = pos.wager.0;
         let mut fee = 0u128;
+        let mut minted = 0u128;
+        let payout;
         if pnl < 0 {
             let loss = (-pnl) as u128;
             self.liquidity += loss;
-            acct.balance = U128(acct.balance.0 + wager - loss);
-            acct.nitro = U128(acct.nitro.0 + loss * self.config.nitro_per_usdc as u128);
+            payout = wager - loss;
+            minted = loss * self.config.nitro_per_usdc as u128;
+            acct.nitro = U128(acct.nitro.0 + minted);
+            acct.loss = U128(acct.loss.0 + loss);
         } else {
             let profit = pnl as u128;
             fee = mul_div(profit, self.config.profit_fee_bps as u128, BPS);
             // The payout comes out of the vault; the fee part goes to the protocol.
             self.liquidity -= profit;
             self.fees += fee;
-            acct.balance = U128(acct.balance.0 + wager + profit - fee);
+            payout = wager + profit - fee;
+            acct.profit = U128(acct.profit.0 + profit - fee);
         }
+        acct.balance = U128(acct.balance.0 + payout);
+        acct.trades += 1;
+        let mut e = LedgerEntry::new("close", payout);
+        e.position_id = Some(pos.id);
+        e.market = Some(pos.market.clone());
+        e.long = Some(pos.long);
+        e.leverage = Some(pos.leverage);
+        e.price = Some(U128(exit));
+        e.pnl = Some(pnl.to_string());
+        e.fee = Some(U128(fee));
+        e.nitro = Some(U128(minted));
+        e.reason = Some(reason.into());
+        self.log(&pos.owner, e);
         self.reserved -= pos.reserved.0;
         self.open_interest -= wager * pos.leverage as u128;
         acct.position_ids.retain(|x| *x != pos.id);
