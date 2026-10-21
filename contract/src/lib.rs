@@ -230,6 +230,26 @@ pub struct CloseResult {
     pub reason: String,
 }
 
+/// A native NEAR transfer to the pool account found on chain, credited at the NEAR price of its time.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct NearCredit {
+    pub key: String,
+    pub account: AccountId,
+    /// Amount in yoctoNEAR.
+    pub yocto: U128,
+    /// NEAR/USD price (8 decimals) at the time of the transfer.
+    pub price: U128,
+}
+
+#[near(serializers = [json])]
+pub struct NearView {
+    /// NEAR received from deposits and not yet taken out by the owner to swap.
+    pub held: U128,
+    /// USDC owed to users for NEAR deposits that is not yet backed by USDC in the contract.
+    pub unbacked_usdc: U128,
+}
+
 /// A plain transfer to the pool address that the indexer found on chain.
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -271,6 +291,9 @@ pub struct Contract {
     accounted: u128,
     /// USDC sent out whose transfer has not been confirmed yet.
     in_flight: u128,
+    /// NEAR deposits: yoctoNEAR held for them, and the USDC credited for them not yet backed by USDC.
+    near_held: u128,
+    near_backed: u128,
     /// Bumped on every outgoing transfer and confirmation, so a balance check that raced one is retried.
     out_seq: u64,
     /// When the running credit check started (0 = none). A stuck check expires after 5 minutes.
@@ -331,6 +354,8 @@ impl Contract {
             fees: 0,
             open_interest: 0,
             accounted: 0,
+            near_held: 0,
+            near_backed: 0,
             in_flight: 0,
             out_seq: 0,
             credit_pending: 0,
@@ -355,6 +380,8 @@ impl Contract {
         let amount = amount.0;
         require!(amount > 0, "Nothing deposited");
         let mut acct = self.account_or_default(&sender_id);
+        // USDC that becomes owed to someone (all of it, except USDC that backs NEAR deposits).
+        let mut counted = amount;
         match msg.as_str() {
             "" | "trade" => {
                 require!(amount >= self.config.min_deposit.0, "Deposit below the minimum");
@@ -377,10 +404,20 @@ impl Contract {
                 self.log(&sender_id, LedgerEntry::new("vault_deposit", amount));
                 env::log_str(&format!("EVENT_JSON:{{\"event\":\"vault_deposit\",\"account\":\"{}\",\"amount\":\"{}\",\"shares\":\"{}\"}}", sender_id, amount, shares));
             }
+            "settle_near" => {
+                // USDC bought with deposited NEAR: it backs balances that are already credited.
+                let backs = amount.min(self.near_backed);
+                self.near_backed -= backs;
+                // Anything beyond what NEAR deposits need goes to the vault.
+                let extra = amount - backs;
+                self.liquidity += extra;
+                counted = extra;
+                self.log(&sender_id, LedgerEntry::new("settle_near", amount));
+            }
             _ => env::panic_str("Unknown msg: use \"\" to trade or \"vault\" to provide liquidity"),
         }
         self.accounts.insert(sender_id, acct);
-        self.accounted += amount;
+        self.accounted += counted;
         PromiseOrValue::Value(U128(0))
     }
 
@@ -636,7 +673,8 @@ impl Contract {
             if self.credited.contains(&c.key) || c.amount.0 == 0 {
                 continue;
             }
-            if self.accounted + self.in_flight + c.amount.0 > balance.0 {
+            // NEAR-backed balances are not in the USDC balance yet, so leave them out of the bound.
+            if self.accounted - self.near_backed + self.in_flight + c.amount.0 > balance.0 {
                 env::log_str(&format!("credit skipped, not enough unassigned USDC: {}", c.key));
                 continue;
             }
@@ -658,6 +696,55 @@ impl Contract {
 
     pub fn is_credited(&self, key: String) -> bool {
         self.credited.contains(&key)
+    }
+
+    // ---------- NEAR deposits ----------
+
+    /// Deposit NEAR: credited to your trading balance in USDC at the current NEAR price.
+    #[payable]
+    pub fn deposit_near(&mut self) -> U128 {
+        let who = env::predecessor_account_id();
+        let yocto = env::attached_deposit().as_yoctonear();
+        let price = self.fresh_price("NEAR");
+        let usd = self.credit_near(&who, yocto, price, None);
+        U128(usd)
+    }
+
+    /// Oracle: credit native NEAR transfers made to the pool account (for example before launch),
+    /// at the NEAR price of their time. Each is credited once, and only up to the NEAR the contract
+    /// can account for.
+    pub fn credit_near_transfers(&mut self, credits: Vec<NearCredit>) -> Vec<String> {
+        require!(env::predecessor_account_id() == self.oracle, "Only the oracle can credit transfers");
+        require!(credits.len() <= 50, "Send up to 50 credits");
+        let mut done = vec![];
+        for c in credits {
+            if self.credited.contains(&c.key) || c.yocto.0 == 0 || c.price.0 == 0 {
+                continue;
+            }
+            if c.account == self.owner || c.account == env::current_account_id() {
+                continue;
+            }
+            if self.near_held + c.yocto.0 > self.free_near() {
+                env::log_str(&format!("NEAR credit skipped, not enough unassigned NEAR: {}", c.key));
+                continue;
+            }
+            self.credited.insert(c.key.clone());
+            self.credit_near(&c.account, c.yocto.0, c.price.0, Some(c.key.clone()));
+            done.push(c.key);
+        }
+        done
+    }
+
+    /// Owner: take deposited NEAR out to swap it for USDC. Send the USDC back with msg "settle_near".
+    pub fn withdraw_near(&mut self, yocto: U128) -> Promise {
+        self.assert_owner();
+        require!(yocto.0 > 0 && yocto.0 <= self.near_held, "Not that much deposited NEAR");
+        self.near_held -= yocto.0;
+        Promise::new(self.owner.clone()).transfer(NearToken::from_yoctonear(yocto.0))
+    }
+
+    pub fn get_near(&self) -> NearView {
+        NearView { held: U128(self.near_held), unbacked_usdc: U128(self.near_backed) }
     }
 
     // ---------- Oracle ----------
@@ -899,6 +986,34 @@ impl Contract {
 }
 
 impl Contract {
+    /// NEAR the contract holds beyond what its storage needs, minus a small reserve for gas.
+    fn free_near(&self) -> u128 {
+        let storage = env::storage_usage() as u128 * env::storage_byte_cost().as_yoctonear();
+        let reserve = 2 * 10u128.pow(24);
+        env::account_balance().as_yoctonear().saturating_sub(storage + reserve)
+    }
+
+    /// Credit `yocto` NEAR at `price` (8 decimals) as USDC to `who`.
+    fn credit_near(&mut self, who: &AccountId, yocto: u128, price: u128, key: Option<String>) -> u128 {
+        // yocto (24 dp) * price (8 dp) -> USDC base units (6 dp)
+        let usd = yocto.checked_mul(price).expect("overflow") / 10u128.pow(26);
+        require!(usd >= self.config.min_deposit.0, "Deposit below the minimum");
+        require!(self.config.max_deposit.0 == 0 || usd <= self.config.max_deposit.0, "Deposit above the maximum");
+        let mut acct = self.account_or_default(who);
+        acct.balance = U128(acct.balance.0 + usd);
+        acct.total_deposited = U128(acct.total_deposited.0 + usd);
+        self.accounts.insert(who.clone(), acct);
+        self.accounted += usd;
+        self.near_backed += usd;
+        self.near_held += yocto;
+        let mut e = LedgerEntry::new("deposit_near", usd);
+        e.price = Some(U128(price));
+        e.nitro = Some(U128(yocto)); // NEAR amount in yocto
+        e.reason = key;
+        self.log(who, e);
+        usd
+    }
+
     fn unlock_request(&mut self, req: WithdrawRequest, kind: &str, reason: Option<String>) {
         self.withdraw_requests.remove(&req.id);
         let mut acct = self.account_or_default(&req.account);

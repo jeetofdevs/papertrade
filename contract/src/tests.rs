@@ -690,3 +690,65 @@ fn a_1000_deposit_is_fine() {
     t.deposit("bob.near", 1_000, "");
     assert_eq!(t.balance("bob.near"), 1_000 * USDC);
 }
+
+const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
+
+impl T {
+    fn as_with(&mut self, who: &str, deposit: u128, balance: u128) {
+        let ctx = VMContextBuilder::new()
+            .current_account_id(acc("nitro.near"))
+            .predecessor_account_id(acc(who))
+            .block_timestamp(self.now)
+            .attached_deposit(NearToken::from_yoctonear(deposit))
+            .account_balance(NearToken::from_yoctonear(balance))
+            .build();
+        testing_env!(ctx);
+    }
+}
+
+#[test]
+fn near_deposit_is_credited_in_usdc_at_the_price() {
+    let mut t = setup(); // NEAR at $3
+    t.as_with("bob.near", 10 * NEAR, 100 * NEAR);
+    assert_eq!(t.c.deposit_near().0, 30 * USDC);
+    assert_eq!(t.balance("bob.near"), 30 * USDC);
+    let n = t.c.get_near();
+    assert_eq!(n.held.0, 10 * NEAR);
+    assert_eq!(n.unbacked_usdc.0, 30 * USDC);
+    let l = t.c.get_ledger(acc("bob.near"), None, Some(1));
+    assert_eq!(l[0].kind, "deposit_near");
+    assert_eq!(l[0].nitro.unwrap().0, 10 * NEAR);
+}
+
+#[test]
+#[should_panic(expected = "Deposit above the maximum")]
+fn near_deposit_respects_the_max() {
+    let mut t = setup();
+    t.as_with("bob.near", 400 * NEAR, 1_000 * NEAR); // $1,200
+    t.c.deposit_near();
+}
+
+#[test]
+fn early_near_transfers_are_credited_once_and_bounded() {
+    let mut t = setup();
+    // The account holds 20 NEAR in total; ~2 reserved for gas plus storage.
+    t.as_with("oracle.near", 0, 20 * NEAR);
+    let c = |k: &str, who: &str, n: u128| NearCredit { key: k.into(), account: acc(who), yocto: U128(n * NEAR), price: U128(4 * P) };
+    let done = t.c.credit_near_transfers(vec![c("t1", "bob.near", 5), c("t1", "bob.near", 5), c("t2", "carol.near", 50), c("t3", "owner.near", 1)]);
+    assert_eq!(done, vec!["t1".to_string()]); // duplicate, too large, owner: skipped
+    assert_eq!(t.balance("bob.near"), 20 * USDC); // 5 NEAR at $4
+}
+
+#[test]
+fn settling_near_with_usdc_backs_the_balances() {
+    let mut t = setup();
+    t.as_with("bob.near", 10 * NEAR, 100 * NEAR);
+    t.c.deposit_near(); // $30 unbacked
+    t.as_("owner.near");
+    let _ = t.c.withdraw_near(U128(10 * NEAR));
+    assert_eq!(t.c.get_near().held.0, 0);
+    t.deposit("owner.near", 32, "settle_near"); // swapped for $32
+    let n = t.c.get_near();
+    assert_eq!(n.unbacked_usdc.0, 0);
+    assert_eq!(t.c.get_vault().liquidity.0, 1_000_002 * USDC); // the extra $2 went to the vault
+}
