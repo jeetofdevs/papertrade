@@ -282,7 +282,10 @@ function PoolOrderPanel({ market }: { market: Market }) {
 
 const KIND_LABEL: Record<LedgerItem['kind'], string> = {
   deposit: 'Deposit',
-  withdraw: 'Withdraw',
+  withdraw_request: 'Withdraw requested',
+  withdraw: 'Withdrawn',
+  withdraw_rejected: 'Withdraw rejected',
+  withdraw_cancelled: 'Withdraw cancelled',
   refund: 'Refund',
   vault_deposit: 'Vault deposit',
   vault_withdraw: 'Vault withdraw',
@@ -309,8 +312,8 @@ export function LedgerTable({ items, limit = 100 }: { items: LedgerItem[]; limit
           <tr key={`${e.at}-${i}`}>
             <td>
               <span className={`tag ledger-${e.kind}`}>{KIND_LABEL[e.kind] ?? e.kind}</span>
-              {e.reason === 'max_loss' && <span className="tag tag-liq">max loss</span>}
-              {e.reason === 'take_profit' && <span className="tag tag-tp">take profit</span>}
+              {e.kind === 'close' && e.reason === 'max_loss' && <span className="tag tag-liq">max loss</span>}
+              {e.kind === 'close' && e.reason === 'take_profit' && <span className="tag tag-tp">take profit</span>}
             </td>
             <td>
               {e.market ? (
@@ -328,6 +331,7 @@ export function LedgerTable({ items, limit = 100 }: { items: LedgerItem[]; limit
             <td className={`mono ${e.kind === 'deposit' || e.kind === 'refund' ? 'up' : e.kind === 'withdraw' ? 'down' : ''}`}>
               {e.kind === 'deposit' || e.kind === 'refund' ? '+' : e.kind === 'withdraw' ? '−' : ''}
               {usd(e.amount)}
+              {e.kind === 'withdraw_rejected' && e.reason && <span className="muted small ledger-note"> · {e.reason}</span>}
             </td>
             <td className={`mono ${e.pnl > 0 ? 'up' : e.pnl < 0 ? 'down' : 'muted'}`}>{e.kind === 'close' ? signed(e.pnl - (e.pnl > 0 ? e.fee : 0)) : '—'}</td>
             <td className="muted">{new Date(e.at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}</td>

@@ -23,6 +23,7 @@ import { Nitro } from './pages/Nitro';
 import { Profile } from './pages/Profile';
 import { Leaderboard } from './pages/Leaderboard';
 import { Trade } from './pages/Trade';
+import { Admin } from './pages/Admin';
 
 const ROUTES = {
   trade: { label: 'Trade', el: <Trade /> },
@@ -30,6 +31,7 @@ const ROUTES = {
   leaderboard: { label: 'Leaderboard', el: <Leaderboard /> },
   nitro: { label: '$NITRO', el: <Nitro /> },
   profile: { label: 'Profile', el: <Profile /> },
+  admin: { label: 'Admin', el: <Admin /> },
 } as const;
 type Route = keyof typeof ROUTES;
 
@@ -108,7 +110,7 @@ export function App() {
         </a>
         {inApp && (
         <nav className="nav">
-          {(Object.keys(ROUTES) as Route[]).filter((r) => r !== 'profile').map((r) => (
+          {(Object.keys(ROUTES) as Route[]).filter((r) => r !== 'profile' && (r !== 'admin' || (!!accountId && accountId === pool.owner))).map((r) => (
             <a key={r} href={`#/${r}`} className={`nav-link ${route === r ? 'nav-on' : ''}`}>
               {ROUTES[r].label}
             </a>

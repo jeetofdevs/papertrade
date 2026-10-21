@@ -68,7 +68,21 @@ interface RawAccount {
   profit: string;
   loss: string;
   trades: number;
+  pending_withdraw?: string;
 }
+interface RawRequest {
+  id: number;
+  account: string;
+  amount: string;
+  requested_at: number;
+}
+export interface WithdrawRequest {
+  id: number;
+  account: string;
+  amount: number;
+  requestedAt: number;
+}
+const toRequest = (r: RawRequest): WithdrawRequest => ({ id: r.id, account: r.account, amount: fromUsdc(r.amount), requestedAt: r.requested_at });
 interface RawPosition {
   id: number;
   owner: string;
@@ -111,7 +125,17 @@ interface RawVault {
 }
 
 export interface LedgerItem {
-  kind: 'deposit' | 'withdraw' | 'refund' | 'vault_deposit' | 'vault_withdraw' | 'open' | 'close';
+  kind:
+    | 'deposit'
+    | 'withdraw_request'
+    | 'withdraw'
+    | 'withdraw_rejected'
+    | 'withdraw_cancelled'
+    | 'refund'
+    | 'vault_deposit'
+    | 'vault_withdraw'
+    | 'open'
+    | 'close';
   amount: number;
   at: number;
   positionId: number | null;
@@ -142,6 +166,12 @@ export interface PoolState {
   missing: boolean;
   error: string | null;
   balance: number;
+  /** USDC locked in withdrawal requests waiting for review. */
+  pendingWithdraw: number;
+  /** This user's withdrawal requests waiting for review. */
+  requests: WithdrawRequest[];
+  /** The contract owner, who reviews withdrawals. */
+  owner: string | null;
   nitro: number;
   /** USDC in the user's NEAR wallet. */
   wallet: number;
@@ -157,6 +187,9 @@ const EMPTY: PoolState = {
   missing: false,
   error: null,
   balance: 0,
+  pendingWithdraw: 0,
+  requests: [],
+  owner: null,
   nitro: 0,
   wallet: 0,
   totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
@@ -241,13 +274,15 @@ async function load() {
   const id = account;
   if (!id || !POOL_AVAILABLE) return;
   try {
-    const [a, positions, ledger, config, vault, wallet] = await Promise.all([
+    const [a, positions, ledger, config, vault, wallet, requests, owner] = await Promise.all([
       view<RawAccount>(POOL_ID, 'get_account', { account_id: id }),
       view<RawPosition[]>(POOL_ID, 'get_positions', { account_id: id }),
       view<RawEntry[]>(POOL_ID, 'get_ledger', { account_id: id, from_index: 0, limit: 100 }),
       view<RawConfig>(POOL_ID, 'get_config'),
       view<RawVault>(POOL_ID, 'get_vault'),
       view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).catch(() => '0'),
+      view<RawRequest[]>(POOL_ID, 'get_withdraw_requests', { from_index: 0, limit: 200 }).catch(() => [] as RawRequest[]),
+      view<string>(POOL_ID, 'get_owner').catch(() => null),
     ]);
     if (id !== account) return;
     const items = ledger.map(toItem);
@@ -268,6 +303,9 @@ async function load() {
       missing: false,
       error: null,
       balance: fromUsdc(a.balance),
+      pendingWithdraw: fromUsdc(a.pending_withdraw ?? '0'),
+      requests: requests.filter((r) => r.account === id).map(toRequest),
+      owner,
       nitro: fromUsdc(a.nitro),
       wallet: fromUsdc(wallet),
       totals: {
@@ -363,7 +401,29 @@ const call = (methodName: string, args: object, tgas: number, deposit = '0'): Wa
 export const depositAction = (usd: number): WalletAction =>
   call('ft_transfer_call', { receiver_id: POOL_ID, amount: toUsdc(usd), msg: '' }, 100, '1');
 
-export const withdrawAction = (usd: number) => call('withdraw', { amount: toUsdc(usd) }, 60);
+/** Withdrawals are reviewed: this locks the amount until the owner approves or rejects it. */
+export const requestWithdrawAction = (usd: number) => call('request_withdraw', { amount: toUsdc(usd) }, 30);
+export const cancelWithdrawAction = (id: number) => call('cancel_withdraw', { id }, 30);
+export const approveWithdrawAction = (id: number) => call('approve_withdraw', { id }, 60);
+export const rejectWithdrawAction = (id: number, reason: string) => call('reject_withdraw', { id, reason: reason || null }, 30);
+
+/** Every withdrawal request waiting for review (owner view). */
+export async function loadAllRequests(): Promise<WithdrawRequest[]> {
+  return (await view<RawRequest[]>(POOL_ID, 'get_withdraw_requests', { from_index: 0, limit: 200 })).map(toRequest);
+}
+
+/** A user's balances, for reviewing their request. */
+export async function loadUserSummary(accountId: string) {
+  const a = await view<RawAccount>(POOL_ID, 'get_account', { account_id: accountId });
+  return {
+    balance: fromUsdc(a.balance),
+    deposited: fromUsdc(a.total_deposited),
+    withdrawn: fromUsdc(a.total_withdrawn),
+    profit: fromUsdc(a.profit),
+    loss: fromUsdc(a.loss),
+    trades: a.trades ?? 0,
+  };
+}
 
 export const openAction = (p: { market: Market; side: Side; wager: number; leverage: number; tpRoe: number; limit: number }) =>
   call(
