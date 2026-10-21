@@ -17,8 +17,6 @@
     "@near-wallet-selector/meteor-wallet": "^10.1.4",
     "@near-wallet-selector/modal-ui": "^10.1.4",
     "@near-wallet-selector/my-near-wallet": "^10.1.4",
-    "@orderly.network/hooks": "^3.2.2",
-    "@orderly.network/types": "^3.2.2",
     "buffer": "^6.0.3",
     "lightweight-charts": "^5.2.1",
     "react": "^19.3.1",

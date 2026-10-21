@@ -1,6 +1,5 @@
 import { MARKETS } from '../lib/engine';
 import { pct, price } from '../lib/format';
-import { LIVE_AVAILABLE } from '../lib/live';
 import { usePrices } from '../lib/prices';
 import { useSettings } from '../lib/settings';
 import { NETWORK } from '../lib/wallet';
@@ -71,7 +70,7 @@ export function Footer() {
           <span className="foot2-sep">·</span>
           NEAR {NETWORK}
           <span className="foot2-sep">·</span>
-          {mode === 'live' ? (LIVE_AVAILABLE ? 'Live mode' : 'Live coming soon') : 'Demo mode'}
+          {mode === 'live' ? 'Live · real USDC' : 'Demo mode'}
         </div>
       </div>
 

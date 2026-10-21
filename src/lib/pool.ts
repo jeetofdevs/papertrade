@@ -1,7 +1,9 @@
-// Client for the Nitro vault contract (our own USDC pool on NEAR).
-// Reads go straight to a NEAR RPC node; writes are signed by the user's wallet.
+// Live mode: real USDC trading against the Nitro pool contract on NEAR.
+// Reads go straight to a NEAR RPC node; writes are signed by the user's NEAR wallet.
+// Every deposit, withdrawal and trade is recorded per user by the contract (get_ledger).
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
+import type { Market, Position, Side, Trade } from './engine';
 import { CONTRACT_ID, type WalletAction } from './wallet';
 
 export const POOL_ID = CONTRACT_ID;
@@ -10,15 +12,20 @@ export const POOL_AVAILABLE = POOL_ID !== '';
 export const USDC_ID =
   (import.meta.env.VITE_USDC_CONTRACT as string | undefined) || '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
 const RPC = (import.meta.env.VITE_NEAR_RPC as string | undefined) || 'https://free.rpc.fastnear.com';
-/** Optional keeper service; enables "claim a transfer by tx hash". */
-export const KEEPER_URL = ((import.meta.env.VITE_KEEPER_URL as string | undefined) || '').replace(/\/$/, '');
-const DECIMALS = 1_000_000;
+const USDC = 1_000_000;
+const PRICE = 100_000_000;
+const TGAS = '000000000000';
+const POLL_MS = 4_000;
 
-export interface PoolAccount {
-  balance: number;
-  nitro: number;
-  vaultShares: number;
-  positions: number;
+// ---------- RPC ----------
+
+class RpcError extends Error {
+  constructor(
+    message: string,
+    readonly missing = false,
+  ) {
+    super(message);
+  }
 }
 
 export async function view<T>(contractId: string, method: string, args: object = {}): Promise<T> {
@@ -29,79 +36,347 @@ export async function view<T>(contractId: string, method: string, args: object =
       jsonrpc: '2.0',
       id: 'nitro',
       method: 'query',
-      params: { request_type: 'call_function', finality: 'final', account_id: contractId, method_name: method, args_base64: btoa(JSON.stringify(args)) },
+      params: { request_type: 'call_function', finality: 'optimistic', account_id: contractId, method_name: method, args_base64: btoa(JSON.stringify(args)) },
     }),
   });
   const j = await r.json();
-  if (j.error || j.result?.error) throw new Error(j.error?.cause?.name ?? j.result?.error ?? 'RPC error');
+  const err: string | undefined = j.error?.cause?.name ?? j.error?.message ?? j.result?.error;
+  if (err) throw new RpcError(err, /UNKNOWN_ACCOUNT|CodeDoesNotExist|MethodNotFound|does not exist/i.test(JSON.stringify(j.error ?? j.result?.error)));
   return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)));
 }
 
-/** USDC base units (string) <-> dollars. */
-export const fromUnits = (s: string | undefined) => Number(s ?? 0) / DECIMALS;
-export function toUnits(usd: number): string {
+// ---------- Units ----------
+
+export const fromUsdc = (s: string | undefined) => Number(s ?? 0) / USDC;
+export const fromPrice = (s: string | undefined) => Number(s ?? 0) / PRICE;
+export function toUsdc(usd: number): string {
   const [i, f = ''] = usd.toFixed(6).split('.');
-  return (BigInt(i) * BigInt(DECIMALS) + BigInt(f.padEnd(6, '0'))).toString();
+  return (BigInt(i) * BigInt(USDC) + BigInt(f.padEnd(6, '0'))).toString();
+}
+export const toPrice = (p: number) => BigInt(Math.round(p * PRICE)).toString();
+
+// ---------- Contract types ----------
+
+interface RawAccount {
+  balance: string;
+  nitro: string;
+  vault_shares: string;
+  position_ids: number[];
+  total_deposited: string;
+  total_withdrawn: string;
+  volume: string;
+  profit: string;
+  loss: string;
+  trades: number;
+}
+interface RawPosition {
+  id: number;
+  owner: string;
+  market: Market;
+  long: boolean;
+  wager: string;
+  leverage: number;
+  entry: string;
+  liq: string;
+  tp: string | null;
+  reserved: string;
+  opened_at: number;
+}
+interface RawEntry {
+  kind: string;
+  amount: string;
+  at: number;
+  position_id: number | null;
+  market: Market | null;
+  long: boolean | null;
+  leverage: number | null;
+  price: string | null;
+  pnl: string | null;
+  fee: string | null;
+  nitro: string | null;
+  reason: string | null;
+}
+interface RawConfig {
+  max_leverage: number;
+  min_wager: string;
+  max_position_bps: number;
+  max_profit_multiple: number;
+  profit_fee_bps: number;
+  spread_bps: number;
+  min_deposit: string;
+}
+interface RawVault {
+  liquidity: string;
+  free: string;
 }
 
-export async function loadPoolAccount(accountId: string): Promise<PoolAccount> {
-  const a = await view<{ balance: string; nitro: string; vault_shares: string; position_ids: number[] }>(POOL_ID, 'get_account', { account_id: accountId });
-  return { balance: fromUnits(a.balance), nitro: fromUnits(a.nitro), vaultShares: fromUnits(a.vault_shares), positions: a.position_ids.length };
+export interface LedgerItem {
+  kind: 'deposit' | 'withdraw' | 'refund' | 'vault_deposit' | 'vault_withdraw' | 'open' | 'close';
+  amount: number;
+  at: number;
+  positionId: number | null;
+  market: Market | null;
+  side: Side | null;
+  leverage: number | null;
+  price: number;
+  pnl: number;
+  fee: number;
+  nitro: number;
+  reason: 'close' | 'max_loss' | 'take_profit' | null;
 }
 
-export async function loadUsdcBalance(accountId: string): Promise<number> {
-  return fromUnits(await view<string>(USDC_ID, 'ft_balance_of', { account_id: accountId }));
+export interface PoolConfig {
+  maxLeverage: number;
+  minWager: number;
+  maxPositionShare: number;
+  maxProfitMultiple: number;
+  profitFee: number;
+  spread: number;
+  minDeposit: number;
 }
 
-/** Polls the user's pool account and wallet USDC. */
-export function usePoolAccount(accountId: string | null) {
-  const [data, setData] = useState<{ pool: PoolAccount; wallet: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
-  useEffect(() => {
-    if (!POOL_AVAILABLE || !accountId) return;
-    let live = true;
-    const load = () =>
-      Promise.all([loadPoolAccount(accountId), loadUsdcBalance(accountId)])
-        .then(([pool, wallet]) => live && (setData({ pool, wallet }), setError(null)))
-        .catch((e: Error) => live && setError(e.message));
-    load();
-    const t = setInterval(load, 10_000);
-    return () => {
-      live = false;
-      clearInterval(t);
-    };
-  }, [accountId, nonce]);
-  return { data, error, refresh: () => setNonce((n) => n + 1) };
+export interface PoolState {
+  /** True once the first load finished. */
+  ready: boolean;
+  /** The contract is not deployed yet. */
+  missing: boolean;
+  error: string | null;
+  balance: number;
+  nitro: number;
+  /** USDC in the user's NEAR wallet. */
+  wallet: number;
+  totals: { deposited: number; withdrawn: number; volume: number; profit: number; loss: number; trades: number };
+  positions: Position[];
+  ledger: LedgerItem[];
+  config: PoolConfig;
+  vault: { liquidity: number; free: number };
 }
 
-const TGAS = '000000000000';
+const EMPTY: PoolState = {
+  ready: false,
+  missing: false,
+  error: null,
+  balance: 0,
+  nitro: 0,
+  wallet: 0,
+  totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
+  positions: [],
+  ledger: [],
+  config: { maxLeverage: 1000, minWager: 1, maxPositionShare: 0.02, maxProfitMultiple: 10, profitFee: 0.1, spread: 0, minDeposit: 1 },
+  vault: { liquidity: 0, free: 0 },
+};
 
-/** Deposit from the connected wallet: one ft_transfer_call, credited instantly by the contract. */
-export function depositAction(amountUsd: number, toVault = false): WalletAction {
+const toPosition = (p: RawPosition): Position => {
+  const wager = fromUsdc(p.wager);
   return {
-    type: 'FunctionCall',
-    params: {
-      methodName: 'ft_transfer_call',
-      args: { receiver_id: POOL_ID, amount: toUnits(amountUsd), msg: toVault ? 'vault' : '' },
-      gas: `100${TGAS}`,
-      deposit: '1',
+    id: String(p.id),
+    market: p.market,
+    side: p.long ? 'long' : 'short',
+    collateral: wager,
+    leverage: p.leverage,
+    size: wager * p.leverage,
+    entry: fromPrice(p.entry),
+    liq: fromPrice(p.liq),
+    tp: p.tp ? fromPrice(p.tp) : null,
+    openedAt: Math.floor(p.opened_at / 1e6),
+  };
+};
+
+const toItem = (e: RawEntry): LedgerItem => ({
+  kind: e.kind as LedgerItem['kind'],
+  amount: fromUsdc(e.amount),
+  at: e.at,
+  positionId: e.position_id,
+  market: e.market,
+  side: e.long == null ? null : e.long ? 'long' : 'short',
+  leverage: e.leverage,
+  price: fromPrice(e.price ?? '0'),
+  pnl: Number(e.pnl ?? 0) / USDC,
+  fee: fromUsdc(e.fee ?? '0'),
+  nitro: fromUsdc(e.nitro ?? '0'),
+  reason: e.reason as LedgerItem['reason'],
+});
+
+/** Closed trades from the ledger, in the same shape as demo trades. */
+export function tradesFromLedger(ledger: LedgerItem[]): Trade[] {
+  const opens = new Map(ledger.filter((e) => e.kind === 'open').map((e) => [e.positionId, e]));
+  return ledger
+    .filter((e) => e.kind === 'close' && e.market && e.side && e.leverage)
+    .map((c) => {
+      const o = opens.get(c.positionId);
+      // payout = wager + pnl - fee, so the wager can be recovered when the open entry has rolled off.
+      const wager = o?.amount ?? c.amount - c.pnl + c.fee;
+      return {
+        id: `pool-${c.positionId}`,
+        market: c.market!,
+        side: c.side!,
+        size: wager * c.leverage!,
+        leverage: c.leverage!,
+        entry: o?.price ?? c.price,
+        exit: c.price,
+        pnl: c.pnl > 0 ? c.pnl - c.fee : c.pnl,
+        nitro: c.nitro,
+        reason: c.reason === 'max_loss' ? 'liquidated' : c.reason === 'take_profit' ? 'tp' : 'close',
+        openedAt: o?.at,
+        closedAt: c.at,
+      } satisfies Trade;
+    });
+}
+
+// ---------- Store ----------
+
+let state: PoolState = EMPTY;
+let account: string | null = null;
+let timer: ReturnType<typeof setInterval> | undefined;
+let seenCloses: Set<string> | null = null;
+const listeners = new Set<() => void>();
+const closeListeners = new Set<(t: Trade, item: LedgerItem) => void>();
+
+function set(next: PoolState) {
+  state = next;
+  listeners.forEach((l) => l());
+}
+
+async function load() {
+  const id = account;
+  if (!id || !POOL_AVAILABLE) return;
+  try {
+    const [a, positions, ledger, config, vault, wallet] = await Promise.all([
+      view<RawAccount>(POOL_ID, 'get_account', { account_id: id }),
+      view<RawPosition[]>(POOL_ID, 'get_positions', { account_id: id }),
+      view<RawEntry[]>(POOL_ID, 'get_ledger', { account_id: id, from_index: 0, limit: 100 }),
+      view<RawConfig>(POOL_ID, 'get_config'),
+      view<RawVault>(POOL_ID, 'get_vault'),
+      view<string>(USDC_ID, 'ft_balance_of', { account_id: id }).catch(() => '0'),
+    ]);
+    if (id !== account) return;
+    const items = ledger.map(toItem);
+    // Tell listeners about trades that closed since the last load (by hand, max loss or take profit).
+    const closes = items.filter((e) => e.kind === 'close');
+    const key = (e: LedgerItem) => `${e.positionId}:${e.at}`;
+    if (seenCloses) {
+      const fresh = closes.filter((e) => !seenCloses!.has(key(e)));
+      const trades = tradesFromLedger(items);
+      for (const e of fresh.reverse()) {
+        const t = trades.find((x) => x.id === `pool-${e.positionId}`);
+        if (t) closeListeners.forEach((l) => l(t, e));
+      }
+    }
+    seenCloses = new Set(closes.map(key));
+    set({
+      ready: true,
+      missing: false,
+      error: null,
+      balance: fromUsdc(a.balance),
+      nitro: fromUsdc(a.nitro),
+      wallet: fromUsdc(wallet),
+      totals: {
+        deposited: fromUsdc(a.total_deposited),
+        withdrawn: fromUsdc(a.total_withdrawn),
+        volume: fromUsdc(a.volume),
+        profit: fromUsdc(a.profit),
+        loss: fromUsdc(a.loss),
+        trades: a.trades ?? 0,
+      },
+      positions: positions.map(toPosition),
+      ledger: items,
+      config: {
+        maxLeverage: config.max_leverage,
+        minWager: fromUsdc(config.min_wager),
+        maxPositionShare: config.max_position_bps / 10_000,
+        maxProfitMultiple: config.max_profit_multiple,
+        profitFee: config.profit_fee_bps / 10_000,
+        spread: (config.spread_bps ?? 0) / 10_000,
+        minDeposit: fromUsdc(config.min_deposit ?? '1000000'),
+      },
+      vault: { liquidity: fromUsdc(vault.liquidity), free: fromUsdc(vault.free) },
+    });
+  } catch (e) {
+    const missing = e instanceof RpcError && e.missing;
+    set({ ...state, ready: true, missing, error: missing ? null : (e as Error).message });
+  }
+}
+
+/** Start polling the pool for this NEAR account (or stop with null). */
+export function watchPool(accountId: string | null) {
+  if (accountId === account) return;
+  account = accountId;
+  seenCloses = null;
+  clearInterval(timer);
+  set(EMPTY);
+  if (!accountId) return;
+  load();
+  timer = setInterval(load, POLL_MS);
+}
+
+export const refreshPool = () => load();
+
+export function usePool(): PoolState {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
     },
+    () => state,
+  );
+}
+
+/** Called for every trade that closes while the app is open. */
+export function onPoolClose(fn: (t: Trade, item: LedgerItem) => void) {
+  closeListeners.add(fn);
+  return () => {
+    closeListeners.delete(fn);
   };
 }
 
-export function withdrawAction(amountUsd: number): WalletAction {
-  return { type: 'FunctionCall', params: { methodName: 'withdraw', args: { amount: toUnits(amountUsd) }, gas: `60${TGAS}`, deposit: '0' } };
+// ---------- Slippage (set by the trader, kept per browser) ----------
+
+export const SLIPPAGE_CHOICES = [0.001, 0.005, 0.01, 0.02];
+const SLIP_KEY = 'nitro:slippage';
+export function getSlippage(): number {
+  try {
+    const v = Number(localStorage.getItem(SLIP_KEY));
+    return SLIPPAGE_CHOICES.includes(v) ? v : 0.005;
+  } catch {
+    return 0.005;
+  }
+}
+export function saveSlippage(v: number) {
+  try {
+    localStorage.setItem(SLIP_KEY, String(v));
+  } catch {
+    /* ignore */
+  }
 }
 
-/** Ask the keeper to credit a plain transfer to the pool address. */
-export async function claimTransfer(txHash: string, accountId: string): Promise<string[]> {
-  const r = await fetch(`${KEEPER_URL}/claim`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ txHash: txHash.trim(), accountId }),
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-  return j.credited ?? [];
-}
+/** Worst price a trader accepts: buying (long open, short close) allows a higher price, selling a lower one. */
+export const limitPrice = (mark: number, buy: boolean, slippage: number) => mark * (buy ? 1 + slippage : 1 - slippage);
+
+// ---------- Wallet actions ----------
+
+const call = (methodName: string, args: object, tgas: number, deposit = '0'): WalletAction => ({
+  type: 'FunctionCall',
+  params: { methodName, args, gas: `${tgas}${TGAS}`, deposit },
+});
+
+/** Deposit: one ft_transfer_call to the pool contract, credited to the sender's balance by the contract. */
+export const depositAction = (usd: number): WalletAction =>
+  call('ft_transfer_call', { receiver_id: POOL_ID, amount: toUsdc(usd), msg: '' }, 100, '1');
+
+export const withdrawAction = (usd: number) => call('withdraw', { amount: toUsdc(usd) }, 60);
+
+export const openAction = (p: { market: Market; side: Side; wager: number; leverage: number; tpRoe: number; limit: number }) =>
+  call(
+    'open_position',
+    {
+      market: p.market,
+      long: p.side === 'long',
+      wager: toUsdc(p.wager),
+      leverage: p.leverage,
+      tp_roe_bps: p.tpRoe > 0 ? Math.round(p.tpRoe * 100) : null,
+      acceptable_price: toPrice(p.limit),
+    },
+    100,
+  );
+
+export const closeAction = (id: string, limit: number) => call('close_position', { id: Number(id), acceptable_price: toPrice(limit) }, 100);

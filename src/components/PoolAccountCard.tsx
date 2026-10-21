@@ -1,31 +1,32 @@
 import { useState } from 'react';
-import { depositAction, POOL_AVAILABLE, POOL_ID, USDC_ID, usePoolAccount, withdrawAction } from '../lib/pool';
 import { usd } from '../lib/format';
+import { depositAction, POOL_ID, refreshPool, USDC_ID, usePool, withdrawAction } from '../lib/pool';
 import { useWallet } from '../lib/wallet';
 import { toast } from './Toasts';
 
 type Tab = 'deposit' | 'withdraw';
 
-/** The user's account in the Nitro pool: balance, deposit, withdraw and the pool's deposit address. */
+/** Live USDC balance with deposit and withdraw. Depositing is one contract call signed by the user's NEAR wallet. */
 export function PoolAccountCard() {
   const { accountId, signAndSend } = useWallet();
-  const { data, error, refresh } = usePoolAccount(accountId);
+  const pool = usePool();
   const [tab, setTab] = useState<Tab>('deposit');
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (!POOL_AVAILABLE) {
+  if (pool.missing) {
     return (
       <section className="panel pad pool-card" id="pool">
-        <h2>Nitro Pool account</h2>
-        <p className="muted">The Nitro Pool contract is not deployed yet. Once it is live, you deposit USDC on NEAR here and trade from your pool balance.</p>
+        <h2>USDC balance</h2>
+        <p className="muted">Live trading is launching soon. Deposits open as soon as the Nitro pool is live.</p>
       </section>
     );
   }
 
   const n = Number(amount);
-  const max = tab === 'deposit' ? data?.wallet ?? 0 : data?.pool.balance ?? 0;
-  const valid = n > 0 && n <= max;
+  const max = tab === 'deposit' ? pool.wallet : pool.balance;
+  const tooSmall = tab === 'deposit' && n > 0 && n < pool.config.minDeposit;
+  const valid = n > 0 && n <= max && !tooSmall;
 
   const submit = async () => {
     if (!valid) return;
@@ -33,9 +34,9 @@ export function PoolAccountCard() {
     try {
       if (tab === 'deposit') await signAndSend(USDC_ID, [depositAction(n)]);
       else await signAndSend(POOL_ID, [withdrawAction(n)]);
-      toast.ok(tab === 'deposit' ? `Deposited ${usd(n)} USDC` : `Withdrawing ${usd(n)} USDC`);
+      toast.ok(tab === 'deposit' ? `Deposited ${usd(n)} USDC` : `Withdrew ${usd(n)} USDC`);
       setAmount('');
-      refresh();
+      refreshPool();
     } catch (e) {
       toast.err((e as Error).message || 'Transaction cancelled');
     } finally {
@@ -45,28 +46,23 @@ export function PoolAccountCard() {
 
   return (
     <section className="panel pad pool-card" id="pool">
-      <div className="pool-head">
-        <h2>Nitro Pool account</h2>
-        <span className="chip mono" title="Pool contract">
-          {POOL_ID}
-        </span>
-      </div>
+      <h2>USDC balance</h2>
 
       <div className="pool-balances">
         <div>
-          <span className="label">Pool balance</span>
-          <b className="mono">{data ? `$${usd(data.pool.balance)}` : '—'}</b>
+          <span className="label">Trading balance</span>
+          <b className="mono">${usd(pool.balance)}</b>
         </div>
         <div>
-          <span className="label">Wallet USDC</span>
-          <b className="mono">{data ? `$${usd(data.wallet)}` : '—'}</b>
+          <span className="label">In your wallet</span>
+          <b className="mono">${usd(pool.wallet)}</b>
         </div>
         <div>
           <span className="label">NITRO earned</span>
-          <b className="mono">{data ? usd(data.pool.nitro) : '—'}</b>
+          <b className="mono">{usd(pool.nitro)}</b>
         </div>
       </div>
-      {error && <p className="hint err">Could not read the pool: {error}</p>}
+      {pool.error && <p className="hint err">Could not load your balance: {pool.error}</p>}
 
       <div className="pool-tabs">
         {(['deposit', 'withdraw'] as Tab[]).map((t) => (
@@ -78,7 +74,7 @@ export function PoolAccountCard() {
 
       <div className="field">
         <div className="field-head">
-          <label htmlFor="pool-amt">{tab === 'deposit' ? 'Deposit from your wallet' : 'Withdraw to your wallet'}</label>
+          <label htmlFor="pool-amt">{tab === 'deposit' ? 'Amount to deposit' : 'Amount to withdraw'}</label>
           <span className="muted">
             Max <b className="mono">{usd(max)}</b> USDC
           </span>
@@ -90,13 +86,14 @@ export function PoolAccountCard() {
           </button>
           <span className="unit">USDC</span>
         </div>
-        <button className="btn btn-primary pool-go" disabled={!valid || busy} onClick={submit}>
+        <button className="btn btn-primary pool-go" disabled={!valid || busy || !accountId} onClick={submit}>
           {busy ? 'Confirm in your wallet…' : tab === 'deposit' ? 'Deposit USDC' : 'Withdraw USDC'}
         </button>
+        {tooSmall && <p className="hint err">Minimum deposit is {usd(pool.config.minDeposit)} USDC.</p>}
         <p className="muted small">
           {tab === 'deposit'
-            ? `You sign one contract call from your NEAR wallet. Your USDC goes to the Nitro pool (${POOL_ID}) and is added to your balance there as soon as it confirms.`
-            : 'Free balance only. USDC arrives in your NEAR wallet in a few seconds.'}
+            ? 'Confirm one transaction in your NEAR wallet. Your trading balance updates as soon as it lands.'
+            : 'Your free balance goes back to your NEAR wallet in a few seconds.'}
         </p>
       </div>
     </section>

@@ -1,11 +1,47 @@
-// Daily and weekly quests, counted from real USDC trades on Orderly (Live mode).
+// Daily and weekly quests, counted from real USDC trades in the Nitro pool (Live mode).
 
-import type { LiveFill, LiveOpen } from './live';
+import type { LedgerItem } from './pool';
+
+export interface LiveFill {
+  at: number;
+  market: string;
+  usd: number;
+  /** Realized PnL when the fill closed a position, else 0. */
+  pnl: number;
+}
+
+export interface LiveOpen {
+  at: number;
+  market: string;
+  usd: number;
+  leverage: number;
+}
+
+/** Opens and closes from the user's on-chain history, as quest activity. */
+export function activityFromLedger(ledger: LedgerItem[]): { fills: LiveFill[]; opens: LiveOpen[] } {
+  const fills: LiveFill[] = [];
+  const opens: LiveOpen[] = [];
+  const wagers = new Map<number | null, number>();
+  for (const e of ledger) if (e.kind === 'open') wagers.set(e.positionId, e.amount);
+  for (const e of ledger) {
+    if (!e.market || !e.leverage) continue;
+    if (e.kind === 'open') {
+      const usd = e.amount * e.leverage;
+      opens.push({ at: e.at, market: e.market, usd, leverage: e.leverage });
+      fills.push({ at: e.at, market: e.market, usd, pnl: 0 });
+    } else if (e.kind === 'close') {
+      const wager = wagers.get(e.positionId) ?? e.amount - e.pnl + e.fee;
+      const pnl = e.pnl > 0 ? e.pnl - e.fee : e.pnl;
+      fills.push({ at: e.at, market: e.market, usd: wager * e.leverage, pnl: pnl === 0 ? -1e-9 : pnl });
+    }
+  }
+  return { fills, opens };
+}
 
 export interface QuestInput {
-  /** Real fills from Orderly. */
+  /** Real opens and closes from the pool. */
   fills: LiveFill[];
-  /** Orders Nitro sent to Orderly, with the leverage used. */
+  /** Opened positions, with the leverage used. */
   opens: LiveOpen[];
   /** Times the trader shared a PnL card. */
   shares: number[];

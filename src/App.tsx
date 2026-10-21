@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CelebrationHost, resultFromTrade, showTradeResult } from './components/Celebration';
 import { ConfirmHost } from './components/Confirm';
 import { UwuDecor } from './components/UwuDecor';
@@ -9,8 +9,8 @@ import { ProfileMenu } from './components/ProfileMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { toast, Toasts } from './components/Toasts';
 import { startActivity } from './lib/activity';
-import { LIVE_AVAILABLE, useLiveSummary } from './lib/live';
-import { useSettings } from './lib/settings';
+import { onPoolClose, usePool, watchPool } from './lib/pool';
+import { getSettings, useSettings } from './lib/settings';
 import { account, faucet, FAUCET_AMOUNT } from './lib/engine';
 import { usd } from './lib/format';
 import { startPrices } from './lib/prices';
@@ -23,8 +23,6 @@ import { Nitro } from './pages/Nitro';
 import { Profile } from './pages/Profile';
 import { Leaderboard } from './pages/Leaderboard';
 import { Trade } from './pages/Trade';
-
-const OrderlyRoot = lazy(() => import('./live/OrderlyLive').then((m) => ({ default: m.OrderlyRoot })));
 
 const ROUTES = {
   trade: { label: 'Trade', el: <Trade /> },
@@ -48,13 +46,28 @@ export function App() {
   const accountRef = useRef(accountId);
   accountRef.current = accountId;
   const { mode } = useSettings();
-  const live = useLiveSummary();
+  const pool = usePool();
+
+  // Live mode reads the user's balance, positions and history from the pool contract.
+  useEffect(() => {
+    // Test builds (VITE_ALLOW_GUEST) also load the guest account, so the screens can be checked without a wallet.
+    watchPool(mode === 'live' ? accountId ?? (ALLOW_GUEST ? traderId : null) : null);
+  }, [mode, accountId, traderId]);
 
   useEffect(() => {
     startPrices();
     startActivity();
     const onHash = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHash);
+    // Live trades: every close the contract records (by hand, take profit or max loss).
+    const offPool = onPoolClose((t) => {
+      if (t.reason === 'tp' || t.pnl > 0) sound.win();
+      else if (t.reason === 'liquidated') sound.bust();
+      else sound.loss();
+      if (t.reason === 'tp') toast.ok(`${t.market} ${t.side} ${t.leverage}x hit take profit: +${t.pnl.toFixed(2)} USDC`);
+      else if (t.reason === 'liquidated') toast.err(`${t.market} ${t.side} ${t.leverage}x hit max loss — earned ${Math.round(t.nitro).toLocaleString('en-US')} NITRO`);
+      showTradeResult(resultFromTrade(t, accountRef.current));
+    });
     const off = onAutoClose((t) => {
       if (t.reason === 'tp') {
         sound.win();
@@ -68,6 +81,7 @@ export function App() {
     return () => {
       window.removeEventListener('hashchange', onHash);
       off();
+      offPool();
     };
   }, []);
 
@@ -76,7 +90,7 @@ export function App() {
     if (!inApp) return;
     if (!getState().accounts[traderId]) {
       dispatch((s) => faucet(s, traderId, Date.now()));
-      toast.ok(`Welcome! ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added to your account`);
+      if (getSettings().mode === 'demo') toast.ok(`Welcome! ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC added to your account`);
     }
   }, [traderId, inApp]);
 
@@ -113,9 +127,9 @@ export function App() {
             </button>
           )}
           {inApp && mode === 'live' && (
-            <span className="balance mono" title="Live account value">
-              {usd(live.accountValue)} <span className="muted">USDC live</span>
-            </span>
+            <a className="balance mono" href="#/profile" title="Your USDC trading balance">
+              {usd(pool.balance)} <span className="muted">USDC</span>
+            </a>
           )}
           {inApp && <SettingsMenu />}
           {inApp ? (
@@ -130,10 +144,6 @@ export function App() {
       <main>
         {!inApp ? (
           <Landing />
-        ) : mode === 'live' && LIVE_AVAILABLE ? (
-          <Suspense fallback={<div className="panel empty">Loading…</div>}>
-            <OrderlyRoot>{ROUTES[route].el}</OrderlyRoot>
-          </Suspense>
         ) : (
           ROUTES[route].el
         )}

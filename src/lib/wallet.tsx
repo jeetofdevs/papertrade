@@ -6,8 +6,25 @@ import type { WalletSelectorModal } from '@near-wallet-selector/modal-ui';
 import '@near-wallet-selector/modal-ui/styles.css';
 
 export const NETWORK = (import.meta.env.VITE_NEAR_NETWORK as 'testnet' | 'mainnet' | undefined) || 'mainnet';
-/** The deployed Nitro contract. Real-money mode stays off until this is set. */
-export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || '';
+/** The Nitro pool contract. Live mode trades real USDC against it. */
+export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) || 'nitroonnear.near';
+const RPC_URL = (import.meta.env.VITE_NEAR_RPC as string | undefined) || 'https://free.rpc.fastnear.com';
+
+/** Is the pool contract deployed? Sign-in asks for a trading key for it only when it is. */
+async function contractDeployed(): Promise<boolean> {
+  try {
+    const r = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'nitro', method: 'query', params: { request_type: 'view_code', finality: 'final', account_id: CONTRACT_ID } }),
+      signal: AbortSignal.timeout(4000),
+    });
+    const j = await r.json();
+    return !!j.result?.code_base64;
+  } catch {
+    return false;
+  }
+}
 export const REAL_MODE_AVAILABLE = CONTRACT_ID !== '';
 export const GUEST = 'guest';
 /** Test builds only: let the app open without a wallet. */
@@ -51,11 +68,12 @@ async function loadSelector() {
     import('@near-wallet-selector/meteor-wallet'),
     import('@near-wallet-selector/here-wallet'),
   ]);
+  const deployed = CONTRACT_ID ? await contractDeployed() : false;
   const s = await core.setupWalletSelector({
     network: NETWORK,
     modules: [meteor.setupMeteorWallet(), mnw.setupMyNearWallet(), here.setupHereWallet()],
   });
-  return { s, setupModal: modal.setupModal };
+  return { s, setupModal: modal.setupModal, deployed };
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -67,9 +85,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let unsub: (() => void) | undefined;
     // Wallet code is large, so load it after the trading UI is on screen.
     loadSelector()
-      .then(({ s, setupModal }) => {
+      .then(({ s, setupModal, deployed }) => {
         setSelector(s);
-        setModal(setupModal(s, CONTRACT_ID ? { contractId: CONTRACT_ID } : {}));
+        // With the contract set, wallets add a key that can only call the pool, so trades need no popup.
+        setModal(setupModal(s, deployed ? { contractId: CONTRACT_ID } : {}));
         const pick = () => s.store.getState().accounts.find((a) => a.active)?.accountId ?? null;
         setAccountId(pick());
         const sub = s.store.observable.subscribe(() => setAccountId(pick()));

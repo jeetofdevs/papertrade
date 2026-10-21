@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Chart } from '../components/Chart';
 import { MarketBar } from '../components/MarketBar';
 import { OrderPanel } from '../components/OrderPanel';
@@ -6,12 +6,11 @@ import { Positions } from '../components/Positions';
 import { PositionTrack } from '../components/PositionTrack';
 import { TradeTicker } from '../components/TradeTicker';
 import { account, Market } from '../lib/engine';
-import { LIVE_AVAILABLE, useLiveSummary } from '../lib/live';
+import { usePool } from '../lib/pool';
+import { PoolPositions, PoolTrade } from '../live/PoolTrade';
 import { useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
 import { useWallet } from '../lib/wallet';
-
-const LiveTrade = lazy(() => import('../live/OrderlyLive').then((m) => ({ default: m.LiveTrade })));
 
 export function Trade() {
   const [market, setMarket] = useState<Market>(() => {
@@ -25,8 +24,7 @@ export function Trade() {
   const acct = account(useStore(), traderId);
   const { mode } = useSettings();
   const live = mode === 'live';
-  const liveSummary = useLiveSummary();
-  const livePositions = liveSummary.positions;
+  const livePositions = usePool().positions;
   const pick = (m: Market) => {
     setMarket(m);
     try {
@@ -39,18 +37,7 @@ export function Trade() {
     <div className="trade">
       <MarketBar market={market} onChange={pick} />
       {live ? (
-        LIVE_AVAILABLE ? (
-          <Suspense fallback={<div className="panel empty">Loading…</div>}>
-            <LiveTrade market={market} />
-          </Suspense>
-        ) : (
-          <div className="panel pad live-off">
-            <h3>Live mode is not set up yet</h3>
-            <p className="muted">
-              Live trading is coming soon. Until then, use Demo mode.
-            </p>
-          </div>
-        )
+        <PoolTrade market={market} />
       ) : (
         <div className="trade-main">
           <Chart market={market} positions={acct.positions} history={acct.history} />
@@ -65,7 +52,7 @@ export function Trade() {
         </div>
       )}
       <TradeTicker />
-      {!live && <Positions />}
+      {live ? <PoolPositions /> : <Positions />}
     </div>
   );
 }

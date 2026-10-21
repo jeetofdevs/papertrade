@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { toast } from '../components/Toasts';
 import { account, claimQuest } from '../lib/engine';
 import { compact } from '../lib/format';
-import { LIVE_AVAILABLE, liveOpens, useLiveActivity } from '../lib/live';
-import { level, nextReset, QUEST_PREFIX, QuestState, quests } from '../lib/quests';
+import { usePool } from '../lib/pool';
+import { activityFromLedger, level, nextReset, QUEST_PREFIX, QuestState, quests } from '../lib/quests';
 import { setSetting, useSettings } from '../lib/settings';
 import { sound } from '../lib/sound';
 import { dispatch, useStore } from '../lib/store';
@@ -19,7 +19,8 @@ export function Quests() {
   const state = useStore();
   const { traderId } = useWallet();
   const { mode } = useSettings();
-  const live = useLiveActivity();
+  const pool = usePool();
+  const live = activityFromLedger(pool.ledger);
   const acct = account(state, traderId);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -27,17 +28,19 @@ export function Quests() {
     return () => clearInterval(t);
   }, []);
 
-  const tracking = mode === 'live' && LIVE_AVAILABLE && live.ready;
+  const LIVE_AVAILABLE = !pool.missing;
+  const tracking = mode === 'live' && pool.ready && !pool.missing;
   const list = quests(
     {
       fills: tracking ? live.fills : [],
-      opens: tracking ? liveOpens(live.address) : [],
+      opens: tracking ? live.opens : [],
       shares: acct.shares ?? [],
       claims: acct.questClaims ?? {},
     },
     now,
   );
-  const volume30d = tracking ? live.fills.reduce((s, f) => s + f.usd, 0) : 0;
+  const since = now - 30 * 24 * 3600 * 1000;
+  const volume30d = tracking ? live.fills.filter((f) => f.at >= since).reduce((s, f) => s + f.usd, 0) : 0;
   const lv = level(volume30d);
   const ready = tracking ? list.filter((q) => q.done && !q.claimed) : [];
   const claimable = ready.reduce((s, q) => s + q.reward, 0);
@@ -103,10 +106,10 @@ export function Quests() {
             <b>Quests count real USDC trades only</b>
             <p className="muted small">
               {!LIVE_AVAILABLE
-                ? 'Live trading is not set up on this site yet, so quests cannot be tracked.'
+                ? 'Live trading is launching soon. Quests start counting once it is live.'
                 : mode !== 'live'
                   ? 'Demo trades do not count. Switch to Live to make progress.'
-                  : 'Connect your wallet and enable trading in Live mode to load your trades.'}
+                  : 'Connect your NEAR wallet to load your trades.'}
             </p>
           </div>
           {LIVE_AVAILABLE && mode !== 'live' && (
@@ -116,7 +119,7 @@ export function Quests() {
           )}
           {LIVE_AVAILABLE && mode === 'live' && (
             <a className="btn btn-primary" href="#/trade">
-              Set up Live
+              Go trade
             </a>
           )}
         </div>

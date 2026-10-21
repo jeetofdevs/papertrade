@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 
 export interface Settings {
-  /** demo: local demo USDC. live: real USDC on Orderly Network. */
+  /** demo: local demo USDC. live: real USDC in the Nitro pool on NEAR. */
   mode: 'demo' | 'live';
   chartType: 'tick' | 'candles';
   showEntries: boolean;

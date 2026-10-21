@@ -2219,7 +2219,7 @@ html.uwuless .top {
   background: linear-gradient(135deg, #ffe3f1, #e9dcff, #d6f5ff);
 }
 
-/* Live (Orderly) setup */
+/* Live setup */
 .live-setup {
   display: grid;
   gap: 12px;
@@ -3790,3 +3790,19 @@ html.uwuless .chart-scene .sky-comet {
   .pool-copy { grid-template-columns: minmax(0, 1fr) auto; }
   .pool-copy .label { grid-column: span 2; }
 }
+
+/* ---------- Live mode (Nitro pool) ---------- */
+.live-balance { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.live-balance > div { display: grid; gap: 2px; }
+.live-balance b { font-size: 16px; }
+.funds-modal { position: relative; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+.funds-modal .pool-card { margin-top: 0; }
+.funds-x { position: absolute; top: 12px; right: 12px; z-index: 1; }
+.profile-equity { display: grid; justify-items: end; gap: 4px; }
+.profile-equity .btn { margin-top: 6px; }
+@media (max-width: 640px) { .profile-equity { justify-items: start; } }
+.tag.ledger-deposit, .tag.ledger-refund { color: var(--mint); background: rgba(0, 236, 151, 0.12); }
+.tag.ledger-withdraw { color: var(--amber); background: rgba(255, 181, 71, 0.12); }
+.tag.ledger-open { color: var(--text); background: var(--panel-2); }
+.tag.ledger-close { color: var(--muted); background: var(--panel-2); }
+.tag.ledger-vault_deposit, .tag.ledger-vault_withdraw { color: #c9b8ff; background: rgba(201, 184, 255, 0.12); }

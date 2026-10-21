@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Avatar } from '../components/Avatar';
 import { PoolAccountCard } from '../components/PoolAccountCard';
 import { ShareCard, ShareData } from '../components/ShareCard';
-import { toast } from '../components/Toasts';
 import { TokenIcon } from '../components/TokenIcon';
 import { account, Trade } from '../lib/engine';
-import { compact, price, shortAccount, signed, signedUsd, usd } from '../lib/format';
-import { explorerUrl, profileStats } from '../lib/profile';
+import { compact, price, signed, signedUsd, usd } from '../lib/format';
+import { tradesFromLedger, usePool } from '../lib/pool';
+import { profileStats } from '../lib/profile';
+import { useSettings } from '../lib/settings';
+import { FundsModal, LedgerTable } from '../live/PoolTrade';
 import { useStore } from '../lib/store';
-import { NETWORK, useWallet } from '../lib/wallet';
+import { useWallet } from '../lib/wallet';
 import { Stat } from './Earn';
 
 /** Cumulative realised PnL, oldest trade first. */
@@ -42,8 +44,16 @@ function PnlChart({ history }: { history: Trade[] }) {
 export function Profile() {
   const { accountId, traderId } = useWallet();
   const state = useStore();
-  const acct = account(state, traderId);
+  const { mode } = useSettings();
+  const live = mode === 'live';
+  const pool = usePool();
+  const demoAcct = account(state, traderId);
+  // Live mode shows the real account from the pool contract; demo mode the local demo account.
+  const acct = live
+    ? { ...demoAcct, usdc: pool.balance, nitro: pool.nitro, positions: pool.positions, history: tradesFromLedger(pool.ledger), pendingProfit: 0, lpShares: 0, realizedPnl: pool.totals.profit - pool.totals.loss, volume: pool.totals.volume }
+    : demoAcct;
   const st = profileStats(state, acct);
+  const [funds, setFunds] = useState(false);
   const id = accountId ?? traderId;
   const [share, setShare] = useState<ShareData | null>(null);
 
@@ -60,15 +70,6 @@ export function Profile() {
       account: accountId,
       time: t.closedAt,
     });
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(id);
-      toast.ok('Address copied');
-    } catch {
-      toast.err('Could not copy');
-    }
-  };
 
   const highlight = (label: string, t: Trade | null) => (
     <div className="panel pad trade-highlight">
@@ -99,26 +100,32 @@ export function Profile() {
       <section className="panel profile-hero">
         <Avatar id={id} size={72} />
         <div className="profile-id">
-          <h1 className="mono">{shortAccount(id)}</h1>
+          <h1>Your profile</h1>
           <div className="profile-actions">
-            <button className="chip" onClick={copy}>
-              Copy address
-            </button>
-            {accountId && (
-              <a className="chip" href={explorerUrl(accountId, NETWORK)} target="_blank" rel="noopener noreferrer">
-                NearBlocks ↗
-              </a>
-            )}
+            <span className="chip">{live ? 'Live · real USDC' : 'Demo account'}</span>
             {st.favourite && <span className="chip">Favourite: {st.favourite}-PERP</span>}
           </div>
         </div>
         <div className="profile-equity">
-          <span className="label">Account equity</span>
-          <b className="mono">${usd(st.equity)}</b>
+          <span className="label">{live ? 'USDC balance' : 'Demo equity'}</span>
+          <b className="mono">${usd(live ? pool.balance : st.equity)}</b>
+          {live && (
+            <button className="btn btn-sm btn-primary" onClick={() => setFunds(true)}>
+              Deposit / withdraw
+            </button>
+          )}
         </div>
       </section>
 
-      <PoolAccountCard />
+      {live && <PoolAccountCard />}
+      {live && (
+        <div className="cards">
+          <Stat label="Total deposited" value={`$${usd(pool.totals.deposited)}`} />
+          <Stat label="Total withdrawn" value={`$${usd(pool.totals.withdrawn)}`} />
+          <Stat label="Profit (after fees)" value={`$${usd(pool.totals.profit)}`} accent={pool.totals.profit > 0} />
+          <Stat label="Losses" value={`$${usd(pool.totals.loss)}`} />
+        </div>
+      )}
 
       <div className="cards">
         <Stat label="Realised PnL" value={signedUsd(st.realizedPnl)} accent={st.realizedPnl > 0} />
@@ -190,7 +197,18 @@ export function Profile() {
           </div>
         )}
       </div>
+      {live && (
+        <div className="panel">
+          <div className="tabs">
+            <span className="tab tab-on">Deposits, withdrawals and trades</span>
+          </div>
+          <div className="table-wrap">
+            <LedgerTable items={pool.ledger} />
+          </div>
+        </div>
+      )}
       {share && <ShareCard data={share} onClose={() => setShare(null)} />}
+      {funds && <FundsModal onClose={() => setFunds(false)} />}
     </div>
   );
 }
