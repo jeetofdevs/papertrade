@@ -1,6 +1,7 @@
 // Owner-only: review withdrawal requests. Approving sends the USDC from the contract to the user.
 
 import { useCallback, useEffect, useState } from 'react';
+import { ChainDeposit, loadChainDeposits } from '../lib/pool';
 import { toast } from '../components/Toasts';
 import { usd } from '../lib/format';
 import {
@@ -114,7 +115,9 @@ export function Admin() {
           </b>
         </div>
       </section>
-      {error && <p className="hint err">Could not load requests: {error}</p>}
+      {error && !pool.missing && <p className="hint err">Could not load requests: {error}</p>}
+
+      <AdminDeposits />
 
       <section className="panel pad admin-promo">
         <div>
@@ -205,6 +208,77 @@ export function Admin() {
             </table>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Every USDC and NEAR deposit into the pool account, read from the chain. */
+function AdminDeposits() {
+  const [rows, setRows] = useState<ChainDeposit[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      loadChainDeposits(10)
+        .then((r) => {
+          if (!live) return;
+          setRows(r);
+          setError(null);
+        })
+        .catch((e: Error) => live && setError(e.message));
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, []);
+  const usdcTotal = (rows ?? []).filter((r) => r.asset === 'USDC').reduce((s, r) => s + r.amount, 0);
+  const nearTotal = (rows ?? []).filter((r) => r.asset === 'NEAR').reduce((s, r) => s + r.amount, 0);
+  const users = new Set((rows ?? []).map((r) => r.account)).size;
+  return (
+    <div className="panel">
+      <div className="tabs">
+        <span className="tab tab-on">All deposits</span>
+        <div className="tabs-right">
+          <span className="muted small">
+            {rows ? `${rows.length} deposits · ${users} users · ${usd(usdcTotal)} USDC · ${usd(nearTotal, 4)} NEAR` : 'Loading…'}
+          </span>
+        </div>
+      </div>
+      {error && <p className="hint err">Could not read deposits from the chain: {error}</p>}
+      <div className="table-wrap">
+        {rows && rows.length === 0 ? (
+          <p className="empty">No deposits yet.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Account</th>
+                <th>Asset</th>
+                <th>Amount</th>
+                <th>Transaction</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(rows ?? []).slice(0, 200).map((d) => (
+                <tr key={`${d.hash}-${d.asset}`}>
+                  <td className="muted">{new Date(d.at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                  <td className="mono">{d.account}</td>
+                  <td>{d.asset}</td>
+                  <td className="mono">{usd(d.amount, d.asset === 'USDC' ? 2 : 4)}</td>
+                  <td>
+                    <a href={`https://nearblocks.io/txns/${d.hash}`} target="_blank" rel="noopener noreferrer">
+                      view ↗
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

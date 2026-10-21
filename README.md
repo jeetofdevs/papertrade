@@ -80,7 +80,7 @@ Launch with small limits (`set_config`) until the contract has been audited. Ora
    the role to another account later with `set_owner`.
 
 The workflow tests and builds the contract, deploys and initialises it (first run only), adds a limited
-keeper key that can only call `push_prices`, `run_keeper` and `credit_transfers`, and registers the
+keeper key that can only call `push_prices`, `run_keeper`, `credit_transfers` and `credit_near_transfers`, and registers the
 contract on USDC. Running it again is safe; an existing contract is only replaced when **upgrade** is ticked.
 
 To deploy by hand instead: `cd contract && cargo near build non-reproducible-wasm`, then
@@ -94,6 +94,14 @@ are in `set_config`; set `promo_amount` to 0 to stop the promo.
 
 The profile and the leaderboard only use real USDC stats from the contract (`get_users_stats`); demo trades
 are never counted.
+
+**NEAR deposits.** Users can deposit NEAR instead of USDC. Live, `deposit_near` credits the trading balance in
+USDC at the oracle NEAR price; before launch, plain NEAR transfers to the pool account are credited at launch by
+the keeper at the NEAR price of their time (the team's own top-ups are skipped; list other accounts to skip in
+`KEEPER_IGNORE`). The NEAR stays in the contract; the owner takes it out with `withdraw_near`, swaps it and sends
+the USDC back with msg `"settle_near"`. Settle before approving large withdrawals: until then NEAR deposits are
+backed by NEAR, not USDC, so a NEAR price drop is a loss for the vault. The Admin page lists every USDC and NEAR
+deposit read from the chain.
 
 **NITRO points and $NITRO.** Every USDC lost on a real trade earns 10 NITRO points on chain (`get_account`,
 total in `get_nitro`); demo trades never count. At token launch the owner sends $NITRO tokens to the contract

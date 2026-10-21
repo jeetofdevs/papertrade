@@ -191,6 +191,8 @@ export interface LedgerItem {
     | 'promo_bonus'
     | 'promo_unlocked'
     | 'promo_ended'
+    | 'deposit_near'
+    | 'settle_near'
     | 'nitro_convert'
     | 'nitro_refund'
     | 'refund'
@@ -243,6 +245,8 @@ export interface PoolState {
   wallet: number;
   /** False when the wallet balance could not be read (busy RPC); the UI then does not cap amounts by it. */
   walletKnown: boolean;
+  /** Spendable NEAR in the user's wallet. */
+  walletNear: number;
   totals: { deposited: number; withdrawn: number; volume: number; profit: number; loss: number; trades: number };
   positions: Position[];
   ledger: LedgerItem[];
@@ -263,6 +267,7 @@ const EMPTY: PoolState = {
   nitro: 0,
   wallet: 0,
   walletKnown: false,
+  walletNear: 0,
   totals: { deposited: 0, withdrawn: 0, volume: 0, profit: 0, loss: 0, trades: 0 },
   positions: [],
   ledger: [],
@@ -345,13 +350,30 @@ let tick = 0;
 let deployed: boolean | null = null;
 let slow: { config: RawConfig; vault: RawVault; requests: RawRequest[]; owner: string | null; promo: RawPromo | null } | null = null;
 
-async function loadWallet(id: string): Promise<{ wallet: number; walletKnown: boolean }> {
+async function loadWallet(id: string): Promise<{ wallet: number; walletKnown: boolean; walletNear: number }> {
+  const near = await nearBalance(id).catch(() => state.walletNear);
   try {
-    return { wallet: fromUsdc(await view<string>(USDC_ID, 'ft_balance_of', { account_id: id })), walletKnown: true };
+    return { wallet: fromUsdc(await view<string>(USDC_ID, 'ft_balance_of', { account_id: id })), walletKnown: true, walletNear: near };
   } catch {
-    return { wallet: state.wallet, walletKnown: state.walletKnown };
+    return { wallet: state.wallet, walletKnown: state.walletKnown, walletNear: near };
   }
 }
+
+const YOCTO = 10n ** 24n;
+/** NEAR the account can spend: balance minus storage and a little for gas. */
+async function nearBalance(id: string): Promise<number> {
+  const j = await rpc('query', { request_type: 'view_account', finality: 'final', account_id: id });
+  if (!j.result) throw new Error('No account');
+  const amount = BigInt(j.result.amount);
+  const storage = BigInt(j.result.storage_usage) * 10n ** 19n;
+  const spendable = amount - storage - 5n * 10n ** 22n; // keep 0.05 NEAR for gas
+  return spendable > 0n ? Number(spendable / 10n ** 18n) / 1e6 : 0;
+}
+export const toYocto = (near: number) => {
+  const [i, f = ''] = near.toFixed(6).split('.');
+  return (BigInt(i) * YOCTO + BigInt(f.padEnd(6, '0')) * 10n ** 18n).toString();
+};
+export const fromYocto = (y: string | number | bigint) => Number(BigInt(y) / 10n ** 18n) / 1e6;
 
 async function load() {
   const id = account;
@@ -511,6 +533,65 @@ const call = (methodName: string, args: object, tgas: number, deposit = '0'): Wa
   params: { methodName, args, gas: `${tgas}${TGAS}`, deposit },
 });
 
+// ---------- NEAR deposits ----------
+
+/** Live: deposit NEAR through the contract, credited in USDC at the current NEAR price. */
+export const nearDepositAction = (near: number) => call('deposit_near', {}, 30, toYocto(near));
+/** Before launch: send NEAR straight to the pool account; credited at launch at the price of that moment. */
+export const preLaunchNearDepositAction = (near: number): WalletAction => ({ type: 'Transfer', params: { deposit: toYocto(near) } });
+
+// ---------- Deposit history read from the chain (NearBlocks) ----------
+
+const NEARBLOCKS = ((import.meta.env.VITE_NEARBLOCKS_API as string | undefined) || 'https://api.nearblocks.io').replace(/\/$/, '');
+
+export interface ChainDeposit {
+  hash: string;
+  account: string;
+  asset: 'USDC' | 'NEAR';
+  amount: number;
+  at: number;
+}
+
+async function nb(path: string): Promise<any> {
+  const r = await fetch(`${NEARBLOCKS}${path}`, { signal: AbortSignal.timeout(10000) });
+  if (!r.ok) throw new Error(`NearBlocks ${r.status}`);
+  return r.json();
+}
+
+const nsToMs = (t: unknown) => Math.floor(Number(t ?? 0) / 1e6);
+
+/** Every USDC and NEAR transfer into the pool account, newest first (best effort, up to `pages` x 50 each). */
+export async function loadChainDeposits(pages = 4): Promise<ChainDeposit[]> {
+  const out: ChainDeposit[] = [];
+  for (let p = 1; p <= pages; p++) {
+    const r = await nb(`/v1/account/${POOL_ID}/ft-txns?page=${p}&per_page=50&order=desc`);
+    const txns: any[] = r?.txns ?? [];
+    for (const t of txns) {
+      const contract = t.ft?.contract ?? t.contract;
+      const delta = Number(t.delta_amount ?? 0);
+      if (contract !== USDC_ID || !(delta > 0) || !t.involved_account_id) continue;
+      out.push({ hash: t.transaction_hash, account: t.involved_account_id, asset: 'USDC', amount: delta / 1e6, at: nsToMs(t.block_timestamp) });
+    }
+    if (txns.length < 50) break;
+  }
+  for (let p = 1; p <= pages; p++) {
+    const r = await nb(`/v1/account/${POOL_ID}/txns?page=${p}&per_page=50&order=desc`);
+    const txns: any[] = r?.txns ?? [];
+    for (const t of txns) {
+      const from = t.signer_account_id ?? t.predecessor_account_id;
+      const acts: any[] = t.actions ?? [];
+      const transfer = acts.length > 0 && acts.every((a) => String(a.action).toUpperCase() === 'TRANSFER');
+      const ok = t.outcomes?.status !== false;
+      if (t.receiver_account_id !== POOL_ID || !from || from === POOL_ID || !transfer || !ok) continue;
+      const yocto = acts.reduce((s, a) => s + BigInt(String(a.deposit ?? '0').split('.')[0]), 0n);
+      if (yocto === 0n) continue;
+      out.push({ hash: t.transaction_hash, account: from, asset: 'NEAR', amount: fromYocto(yocto), at: nsToMs(t.block_timestamp) });
+    }
+    if (txns.length < 50) break;
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
 // ---------- Deposits before the contract is live ----------
 // Users can already send USDC to the pool account. Each transfer carries "nitro:<account>" in its memo,
 // and once the contract is deployed the keeper credits every such transfer to that account (each only once).
@@ -533,7 +614,11 @@ export async function poolCanReceiveUsdc(): Promise<boolean> {
 
 export interface EarlyDeposit {
   at: number;
+  /** Value in USDC. */
   amount: number;
+  asset?: 'USDC' | 'NEAR';
+  /** Amount in the deposited asset. */
+  units?: number;
 }
 const earlyKey = (id: string) => `nitro:early-deposits:${id}`;
 export function earlyDeposits(accountId: string): EarlyDeposit[] {

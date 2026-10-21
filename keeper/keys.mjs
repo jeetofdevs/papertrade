@@ -7,7 +7,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { baseEncode, KeyPair } from 'near-api-js';
 
 /** Methods the keeper key may call on the pool contract. It cannot move funds. */
-export const KEEPER_METHODS = ['push_prices', 'run_keeper', 'credit_transfers'];
+export const KEEPER_METHODS = ['push_prices', 'run_keeper', 'credit_transfers', 'credit_near_transfers'];
 
 export function keeperKeyPair(seed) {
   if (!seed || seed.length < 16) throw new Error('KEEPER_SEED must be at least 16 characters');

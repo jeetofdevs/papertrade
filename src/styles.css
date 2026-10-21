@@ -3866,3 +3866,11 @@ html.uwuless .chart-scene .sky-comet {
 .convert-out { font-size: 22px; }
 .convert-notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 @media (max-width: 640px) { .convert-grid { grid-template-columns: 1fr; } .convert-arrow { justify-self: center; transform: rotate(90deg); } }
+.asset-pick { display: flex; gap: 8px; margin-bottom: 4px; }
+.asset-pick .chip { flex: 1; padding: 8px; font-weight: 700; }
+.pool-request.early a { text-decoration: underline; }
+.promo-popup { position: relative; width: min(420px, calc(100vw - 32px)); display: grid; gap: 10px; text-align: center; }
+.promo-popup h2 { margin: 0; font-size: 22px; }
+.promo-popup p { margin: 0; }
+.promo-popup .promo { text-align: left; }
+.promo-gift { font-size: 44px; line-height: 1; animation: hop 1.2s ease-in-out infinite; }

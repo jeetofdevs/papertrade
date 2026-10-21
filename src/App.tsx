@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CelebrationHost, resultFromTrade, showTradeResult } from './components/Celebration';
 import { ConfirmHost } from './components/Confirm';
+import { PromoPopup } from './components/PromoPopup';
 import { UwuDecor } from './components/UwuDecor';
 import { Footer } from './components/Footer';
 import { Logo } from './components/Logo';
@@ -155,6 +156,7 @@ export function App() {
       <Toasts />
       <ConfirmHost />
       <CelebrationHost />
+      {inApp && <PromoPopup />}
       <UwuDecor />
     </div>
   );

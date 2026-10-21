@@ -285,6 +285,8 @@ function PoolOrderPanel({ market }: { market: Market }) {
 
 const KIND_LABEL: Record<LedgerItem['kind'], string> = {
   deposit: 'Deposit',
+  deposit_near: 'Deposit (NEAR)',
+  settle_near: 'NEAR settled',
   withdraw_request: 'Withdraw requested',
   withdraw: 'Withdrawn',
   withdraw_rejected: 'Withdraw rejected',

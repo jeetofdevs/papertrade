@@ -79,3 +79,22 @@ test('close checks', () => {
   assert.equal(needsClose(short, 250000000n), false);
   assert.equal(needsClose(short, 303000000n), true);
 });
+
+import { parseNearTransfer } from './deposits.mjs';
+
+const ntx = (over = {}) => ({
+  status: { SuccessValue: '' },
+  transaction: { hash: 'HN', signer_id: 'bob.near', receiver_id: 'nitro.near', actions: [{ Transfer: { deposit: '5000000000000000000000000' } }], ...over },
+});
+
+test('native NEAR transfer to the pool is a deposit', () => {
+  assert.deepEqual(parseNearTransfer(ntx(), { pool: 'nitro.near' }), { key: 'near:HN', account: 'bob.near', yocto: '5000000000000000000000000' });
+});
+
+test('other NEAR transactions are not deposits', () => {
+  const pool = { pool: 'nitro.near' };
+  assert.equal(parseNearTransfer(ntx({ receiver_id: 'other.near' }), pool), null);
+  assert.equal(parseNearTransfer(ntx({ signer_id: 'nitro.near' }), pool), null);
+  assert.equal(parseNearTransfer(ntx({ actions: [{ FunctionCall: { method_name: 'x', deposit: '1' } }] }), pool), null);
+  assert.equal(parseNearTransfer({ ...ntx(), status: { Failure: {} } }, pool), null);
+});

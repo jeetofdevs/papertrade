@@ -11,7 +11,7 @@
 
 import http from 'node:http';
 import { Account, JsonRpcProvider } from 'near-api-js';
-import { needsClose, parseDeposits, toPrice8 } from './deposits.mjs';
+import { needsClose, parseDeposits, parseNearTransfer, toPrice8 } from './deposits.mjs';
 import { keeperKeyPair } from './keys.mjs';
 
 const env = (k, d) => process.env[k] ?? d;
@@ -172,6 +172,65 @@ async function scanDeposits() {
   backfilled = true;
 }
 
+// ---------- NEAR deposits made as plain transfers (for example before launch) ----------
+
+const seenNearTx = new Set();
+let nearBackfilled = false;
+const IGNORE = new Set(env('KEEPER_IGNORE', '').split(',').map((s) => s.trim()).filter(Boolean));
+
+/** NEAR/USD (8 decimals) at a moment in the past, from Binance 1-minute candles; else the latest price. */
+async function nearPriceAt(ms) {
+  for (const host of ['https://api.binance.com', 'https://api.binance.us']) {
+    try {
+      const k = await getJson(`${host}/api/v3/klines?symbol=NEARUSDT&interval=1m&startTime=${Math.floor(ms / 60000) * 60000}&limit=1`);
+      if (Array.isArray(k) && k[0]?.[4]) return toPrice8(k[0][4]);
+    } catch {
+      /* next source */
+    }
+  }
+  return lastPrice.get('NEAR') ?? (await fetchPrice('NEAR'));
+}
+
+async function scanNearDeposits() {
+  const headers = NEARBLOCKS_KEY ? { Authorization: `Bearer ${NEARBLOCKS_KEY}` } : {};
+  const owner = await view('get_owner').catch(() => null);
+  const maxPages = nearBackfilled ? 3 : Number(env('BACKFILL_PAGES', 100));
+  const credits = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const r = await getJson(`${NEARBLOCKS}/v1/account/${CONTRACT}/txns?page=${page}&per_page=50&order=desc`, headers);
+    const txns = r?.txns ?? [];
+    let fresh = 0;
+    for (const t of txns) {
+      const hash = t.transaction_hash;
+      if (!hash || seenNearTx.has(hash)) continue;
+      fresh++;
+      seenNearTx.add(hash);
+      const signer = t.signer_account_id ?? t.predecessor_account_id;
+      if ((t.receiver_account_id ?? CONTRACT) !== CONTRACT || !signer || signer === owner || signer === CONTRACT || IGNORE.has(signer)) continue;
+      let tx;
+      try {
+        tx = await txStatus(hash, signer);
+      } catch (e) {
+        seenNearTx.delete(hash);
+        log('could not load tx', hash, e.message);
+        continue;
+      }
+      const d = parseNearTransfer(tx, { pool: CONTRACT });
+      if (!d || (await view('is_credited', { key: d.key }))) continue;
+      const ms = Math.floor(Number(t.block_timestamp ?? Date.now() * 1e6) / 1e6);
+      const price = await nearPriceAt(ms);
+      if (!price) continue;
+      credits.push({ key: d.key, account: d.account, yocto: d.yocto, price: price.toString() });
+    }
+    if (txns.length < 50 || (nearBackfilled && fresh === 0)) break;
+  }
+  nearBackfilled = true;
+  for (let i = 0; i < credits.length; i += 50) {
+    const res = await call('credit_near_transfers', { credits: credits.slice(i, i + 50) }, 200);
+    log(`credited ${Array.isArray(res) ? res.length : '?'} of ${Math.min(50, credits.length - i)} NEAR deposits`);
+  }
+}
+
 // ---------- HTTP: health + manual claim ----------
 
 const claims = new Map(); // ip -> last claim time
@@ -227,3 +286,4 @@ function every(ms, name, fn) {
 
 every(PRICE_MS, 'prices', pushPrices);
 every(DEPOSIT_MS, 'deposits', scanDeposits);
+every(DEPOSIT_MS, 'near deposits', scanNearDeposits);

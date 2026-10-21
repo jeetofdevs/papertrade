@@ -71,3 +71,24 @@ export function needsClose(pos, mark) {
   if (tp != null && (pos.long ? mark >= tp : mark <= tp)) return true;
   return false;
 }
+
+/**
+ * A native NEAR transfer to `pool` (a transaction signed by the depositor with only Transfer actions).
+ * Returns { key, account, yocto } or null. The team's own top-ups are filtered out by the caller.
+ */
+export function parseNearTransfer(tx, { pool }) {
+  const t = tx?.transaction;
+  if (!t || t.receiver_id !== pool || t.signer_id === pool) return null;
+  const status = tx.status ?? {};
+  if (!('SuccessValue' in status)) return null;
+  const actions = t.actions ?? [];
+  if (actions.length === 0) return null;
+  let yocto = 0n;
+  for (const a of actions) {
+    const dep = a?.Transfer?.deposit;
+    if (dep == null) return null; // anything other than a plain transfer is not a deposit
+    yocto += BigInt(dep);
+  }
+  if (yocto === 0n) return null;
+  return { key: `near:${t.hash}`, account: t.signer_id, yocto: yocto.toString() };
+}

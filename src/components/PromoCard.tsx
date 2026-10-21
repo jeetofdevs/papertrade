@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { usd } from '../lib/format';
-import { claimPromoAction, isAdmin, POOL_ID, refreshPool, usePool, X_ACCOUNT } from '../lib/pool';
+import { claimPromoAction, earlyDeposits, isAdmin, POOL_ID, Promo, refreshPool, usePool, X_ACCOUNT } from '../lib/pool';
+
+/** Default promo terms shown before the contract is live. */
+export const PRELAUNCH: Promo = { amount: 3, minDeposit: 2, multiple: 20, minHoldSec: 60, budget: 300, claims: 0, open: true };
 import { sound } from '../lib/sound';
 import { useWallet } from '../lib/wallet';
 import { toast } from './Toasts';
 
 const FOLLOWED_KEY = 'nitro:followed-x';
+const HANDLE_KEY = 'nitro:x-handle';
 const HANDLE_RE = /^@?[A-Za-z0-9_]{1,15}$/;
 
 /** New-user bonus: follow on X, deposit the minimum, claim, then trade the turnover to unlock withdrawals. */
@@ -13,7 +17,21 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
   const { accountId, signAndSend } = useWallet();
   const pool = usePool();
   const [busy, setBusy] = useState(false);
-  const [handle, setHandle] = useState('');
+  const [handle, setHandleState] = useState(() => {
+    try {
+      return localStorage.getItem(HANDLE_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const setHandle = (v: string) => {
+    setHandleState(v);
+    try {
+      localStorage.setItem(HANDLE_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
   const [followed, setFollowed] = useState(() => {
     try {
       return localStorage.getItem(FOLLOWED_KEY) === '1';
@@ -21,9 +39,11 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
       return false;
     }
   });
-  const p = pool.promo;
   const me = pool.userPromo;
-  if (!p || pool.missing || isAdmin(accountId, pool.owner)) return null;
+  if (isAdmin(accountId, pool.owner) || accountId === POOL_ID) return null;
+  // Before launch the promo is announced with its default terms; claiming opens with live trading.
+  const p = pool.promo ?? (pool.missing ? PRELAUNCH : null);
+  if (!p) return null;
   if (me.claimed && !me.locked) return null;
   if (!me.claimed && !p.open) return null;
 
@@ -49,9 +69,9 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  const deposited = pool.totals.deposited >= p.minDeposit;
+  const deposited = pool.missing ? !!accountId && earlyDeposits(accountId).reduce((s, d) => s + d.amount, 0) >= p.minDeposit : pool.totals.deposited >= p.minDeposit;
   const handleOk = HANDLE_RE.test(handle.trim());
-  const canClaim = !!accountId && deposited && followed && handleOk;
+  const canClaim = !pool.missing && !!accountId && deposited && followed && handleOk;
 
   const follow = () => {
     window.open(`https://x.com/intent/follow?screen_name=${X_ACCOUNT}`, '_blank', 'noopener,noreferrer');
@@ -100,7 +120,7 @@ export function PromoCard({ compact = false }: { compact?: boolean }) {
         </li>
       </ol>
       <button className="btn btn-primary btn-block" disabled={!canClaim || busy} onClick={claim}>
-        {busy ? 'Confirm in your wallet…' : `Claim ${usd(p.amount)} USDC`}
+        {busy ? 'Confirm in your wallet…' : pool.missing ? 'Claim opens when live trading starts' : `Claim ${usd(p.amount)} USDC`}
       </button>
       <p className="muted small">
         Withdrawals unlock after {usd(turnover)} USDC in total wagers. We check the follow when you withdraw.

@@ -35,10 +35,9 @@ interface WalletCtx {
   signAndSend: (receiverId: string, actions: WalletAction[]) => Promise<unknown>;
 }
 
-export interface WalletAction {
-  type: 'FunctionCall';
-  params: { methodName: string; args: object; gas: string; deposit: string };
-}
+export type WalletAction =
+  | { type: 'FunctionCall'; params: { methodName: string; args: object; gas: string; deposit: string } }
+  | { type: 'Transfer'; params: { deposit: string } };
 
 const Ctx = createContext<WalletCtx>({
   accountId: null,
@@ -106,7 +105,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!selector || !accountId) throw new Error('Connect a NEAR wallet first');
       const [wallet, { actionCreators }] = await Promise.all([selector.wallet(), import('@near-js/transactions')]);
       const najActions = actions.map((a) =>
-        actionCreators.functionCall(a.params.methodName, a.params.args, BigInt(a.params.gas), BigInt(a.params.deposit)),
+        a.type === 'Transfer'
+          ? actionCreators.transfer(BigInt(a.params.deposit))
+          : actionCreators.functionCall(a.params.methodName, a.params.args, BigInt(a.params.gas), BigInt(a.params.deposit)),
       );
       return wallet.signAndSendTransaction({ signerId: accountId, receiverId, actions: najActions });
     },
