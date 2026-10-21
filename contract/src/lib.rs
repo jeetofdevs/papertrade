@@ -7,11 +7,15 @@
 //! - Every open position reserves its maximum payout in the vault, so winners are always paid and
 //!   liquidity providers cannot withdraw funds that open positions may need.
 //! - Prices come from a trusted oracle account (the keeper) and must be fresh.
+//! - The contract account is also the pool's deposit address. A plain USDC `ft_transfer` to it
+//!   (for example from a wallet app) is picked up by the indexer (the oracle account) and credited
+//!   to the sender, or to the NEAR account written in the transfer memo. Each transfer is credited
+//!   once, and credits can never exceed the USDC the contract holds but has not yet assigned.
 //! - The contract owner can tune limits, pause new positions and collect protocol fees, but cannot
 //!   move trader balances or vault liquidity.
 
 use near_sdk::json_types::U128;
-use near_sdk::store::LookupMap;
+use near_sdk::store::{LookupMap, LookupSet};
 use near_sdk::{
     env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseError, PromiseOrValue,
 };
@@ -95,6 +99,26 @@ pub struct CloseResult {
     pub reason: String,
 }
 
+/// A plain transfer to the pool address that the indexer found on chain.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct TransferCredit {
+    /// Unique id of the transfer, e.g. "<tx hash>:<receipt id>:<event index>".
+    pub key: String,
+    pub account: AccountId,
+    pub amount: U128,
+}
+
+#[near(serializers = [json])]
+pub struct PoolView {
+    /// Send USDC here. This is the contract account.
+    pub deposit_address: AccountId,
+    pub usdc: AccountId,
+    /// USDC the contract owes to traders, liquidity providers and fees.
+    pub accounted: U128,
+    pub in_flight: U128,
+}
+
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Contract {
@@ -112,6 +136,15 @@ pub struct Contract {
     total_shares: u128,
     fees: u128,
     open_interest: u128,
+    /// USDC that belongs to someone: trader balances, open wagers, vault liquidity and fees.
+    accounted: u128,
+    /// USDC sent out whose transfer has not been confirmed yet.
+    in_flight: u128,
+    /// Bumped on every outgoing transfer and confirmation, so a balance check that raced one is retried.
+    out_seq: u64,
+    /// When the running credit check started (0 = none). A stuck check expires after 5 minutes.
+    credit_pending: u64,
+    credited: LookupSet<String>,
 }
 
 fn mul_div(a: u128, b: u128, c: u128) -> u128 {
@@ -148,6 +181,11 @@ impl Contract {
             total_shares: 0,
             fees: 0,
             open_interest: 0,
+            accounted: 0,
+            in_flight: 0,
+            out_seq: 0,
+            credit_pending: 0,
+            credited: LookupSet::new(b"c"),
         }
     }
 
@@ -179,6 +217,7 @@ impl Contract {
             _ => env::panic_str("Unknown msg: use \"\" to trade or \"vault\" to provide liquidity"),
         }
         self.accounts.insert(sender_id, acct);
+        self.accounted += amount;
         PromiseOrValue::Value(U128(0))
     }
 
@@ -208,12 +247,70 @@ impl Contract {
 
     #[private]
     pub fn on_withdraw(&mut self, account: AccountId, amount: U128, #[callback_result] result: Result<(), PromiseError>) {
+        self.in_flight -= amount.0;
+        self.out_seq += 1;
         if result.is_err() {
+            self.accounted += amount.0;
             // Transfer failed (for example the account is not registered on USDC): credit it back.
             let mut acct = self.account_or_default(&account);
             acct.balance = U128(acct.balance.0 + amount.0);
             self.accounts.insert(account, acct);
         }
+    }
+
+    // ---------- Plain transfers to the pool address ----------
+
+    /// Credit plain USDC transfers that the indexer found. Only the oracle account can call this.
+    /// The contract first reads its own USDC balance, and in the callback credits only what is not
+    /// already owed to someone.
+    pub fn credit_transfers(&mut self, credits: Vec<TransferCredit>) -> Promise {
+        require!(env::predecessor_account_id() == self.oracle, "Only the oracle can credit transfers");
+        require!(!credits.is_empty() && credits.len() <= 50, "Send 1 to 50 credits");
+        let now = env::block_timestamp();
+        require!(self.credit_pending == 0 || now - self.credit_pending > 300 * NANOS, "A credit check is already running");
+        self.credit_pending = now;
+        let args = format!("{{\"account_id\":\"{}\"}}", env::current_account_id());
+        Promise::new(self.usdc.clone())
+            .function_call("ft_balance_of".to_string(), args.into_bytes(), NearToken::from_yoctonear(0), Gas::from_tgas(5))
+            .then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(60)).on_credit_balance(credits, self.out_seq))
+    }
+
+    #[private]
+    pub fn on_credit_balance(&mut self, credits: Vec<TransferCredit>, out_seq: u64, #[callback_result] balance: Result<U128, PromiseError>) -> Vec<String> {
+        self.credit_pending = 0;
+        let Ok(balance) = balance else {
+            env::log_str("credit check failed: could not read the USDC balance");
+            return vec![];
+        };
+        if out_seq != self.out_seq {
+            env::log_str("credit check raced a withdrawal, try again");
+            return vec![];
+        }
+        let mut done = vec![];
+        for c in credits {
+            if self.credited.contains(&c.key) || c.amount.0 == 0 {
+                continue;
+            }
+            if self.accounted + self.in_flight + c.amount.0 > balance.0 {
+                env::log_str(&format!("credit skipped, not enough unassigned USDC: {}", c.key));
+                continue;
+            }
+            let mut acct = self.account_or_default(&c.account);
+            acct.balance = U128(acct.balance.0 + c.amount.0);
+            self.accounts.insert(c.account.clone(), acct);
+            self.accounted += c.amount.0;
+            env::log_str(&format!(
+                "EVENT_JSON:{{\"event\":\"deposit\",\"account\":\"{}\",\"amount\":\"{}\",\"key\":\"{}\"}}",
+                c.account, c.amount.0, c.key
+            ));
+            self.credited.insert(c.key.clone());
+            done.push(c.key);
+        }
+        done
+    }
+
+    pub fn is_credited(&self, key: String) -> bool {
+        self.credited.contains(&key)
     }
 
     // ---------- Oracle ----------
@@ -348,6 +445,25 @@ impl Contract {
         }
     }
 
+    /// Open positions with id >= `from_id`, scanning at most `limit` ids. Used by the keeper.
+    pub fn get_open_positions(&self, from_id: u64, limit: u64) -> Vec<Position> {
+        let end = self.next_id.min(from_id.saturating_add(limit.min(500)));
+        (from_id.max(1)..end).filter_map(|id| self.positions.get(&id).cloned()).collect()
+    }
+
+    pub fn get_pool(&self) -> PoolView {
+        PoolView {
+            deposit_address: env::current_account_id(),
+            usdc: self.usdc.clone(),
+            accounted: U128(self.accounted),
+            in_flight: U128(self.in_flight),
+        }
+    }
+
+    pub fn get_oracle(&self) -> AccountId {
+        self.oracle.clone()
+    }
+
     pub fn get_price(&self, market: String) -> Option<PricePoint> {
         self.prices.get(&market).cloned()
     }
@@ -468,7 +584,10 @@ impl Contract {
         CloseResult { id: pos.id, pnl: pnl.to_string(), fee: U128(fee), exit: U128(exit), reason: reason.into() }
     }
 
-    fn send_usdc(&self, to: AccountId, amount: u128) -> Promise {
+    fn send_usdc(&mut self, to: AccountId, amount: u128) -> Promise {
+        self.accounted -= amount;
+        self.in_flight += amount;
+        self.out_seq += 1;
         let args = format!("{{\"receiver_id\":\"{}\",\"amount\":\"{}\"}}", to, amount);
         Promise::new(self.usdc.clone())
             .function_call("ft_transfer".to_string(), args.into_bytes(), NearToken::from_yoctonear(1), Gas::from_tgas(15))

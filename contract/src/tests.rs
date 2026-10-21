@@ -231,3 +231,94 @@ fn withdraw_failure_refunds_balance() {
     t.c.on_withdraw(acc("alice.near"), U128(100 * USDC), Err(PromiseError::Failed));
     assert_eq!(t.balance("alice.near"), 1_000 * USDC);
 }
+
+fn credit(key: &str, who: &str, usdc: u128) -> TransferCredit {
+    TransferCredit { key: key.into(), account: acc(who), amount: U128(usdc * USDC) }
+}
+
+impl T {
+    /// Run the credit flow with the contract holding `held` USDC on the token contract.
+    fn credit(&mut self, credits: Vec<TransferCredit>, held: u128) -> Vec<String> {
+        self.as_("oracle.near");
+        let _ = self.c.credit_transfers(credits.clone());
+        let seq = self.c.out_seq;
+        self.as_("nitro.near");
+        self.c.on_credit_balance(credits, seq, Ok(U128(held * USDC)))
+    }
+}
+
+#[test]
+fn plain_transfer_is_credited_once() {
+    let mut t = setup(); // contract holds $1,001,000 that is already owed
+    let done = t.credit(vec![credit("tx1:r1:0", "bob.near", 50)], 1_001_050);
+    assert_eq!(done, vec!["tx1:r1:0".to_string()]);
+    assert_eq!(t.balance("bob.near"), 50 * USDC);
+    assert!(t.c.is_credited("tx1:r1:0".into()));
+    // The same transfer again does nothing.
+    let done = t.credit(vec![credit("tx1:r1:0", "bob.near", 50)], 1_001_050);
+    assert!(done.is_empty());
+    assert_eq!(t.balance("bob.near"), 50 * USDC);
+    assert_eq!(t.c.get_pool().accounted.0, 1_001_050 * USDC);
+}
+
+#[test]
+fn credits_never_exceed_unassigned_usdc() {
+    let mut t = setup();
+    // Only $30 arrived, but the indexer claims $50 + $20.
+    let done = t.credit(vec![credit("a", "bob.near", 50), credit("b", "carol.near", 20)], 1_001_030);
+    assert_eq!(done, vec!["b".to_string()]);
+    assert_eq!(t.balance("bob.near"), 0);
+    assert_eq!(t.balance("carol.near"), 20 * USDC);
+}
+
+#[test]
+fn credit_check_that_raced_a_withdrawal_is_dropped() {
+    let mut t = setup();
+    t.as_("oracle.near");
+    let credits = vec![credit("x", "bob.near", 100)];
+    let _ = t.c.credit_transfers(credits.clone());
+    let seq = t.c.out_seq;
+    t.as_("alice.near");
+    let _ = t.c.withdraw(U128(100 * USDC));
+    t.as_("nitro.near");
+    t.c.on_withdraw(acc("alice.near"), U128(100 * USDC), Ok(()));
+    // Balance was read before Alice's $100 left, so it looks like $100 is unassigned. It is not.
+    let done = t.c.on_credit_balance(credits, seq, Ok(U128(1_001_000 * USDC)));
+    assert!(done.is_empty());
+    assert_eq!(t.balance("bob.near"), 0);
+}
+
+#[test]
+fn withdrawals_keep_the_books_balanced() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let _ = t.c.withdraw(U128(100 * USDC));
+    let p = t.c.get_pool();
+    assert_eq!(p.accounted.0, 1_000_900 * USDC);
+    assert_eq!(p.in_flight.0, 100 * USDC);
+    t.as_("nitro.near");
+    t.c.on_withdraw(acc("alice.near"), U128(100 * USDC), Ok(()));
+    let p = t.c.get_pool();
+    assert_eq!(p.accounted.0, 1_000_900 * USDC);
+    assert_eq!(p.in_flight.0, 0);
+}
+
+#[test]
+#[should_panic(expected = "Only the oracle can credit transfers")]
+fn only_oracle_can_credit() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let _ = t.c.credit_transfers(vec![credit("k", "alice.near", 1)]);
+}
+
+#[test]
+fn keeper_can_list_open_positions() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let a = t.c.open_position("NEAR".into(), true, U128(10 * USDC), 10, None);
+    let b = t.c.open_position("NEAR".into(), false, U128(10 * USDC), 10, None);
+    t.c.close_position(a);
+    let open = t.c.get_open_positions(0, 100);
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0].id, b);
+}
