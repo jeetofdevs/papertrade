@@ -20,6 +20,13 @@ interface WalletCtx {
   ready: boolean;
   connect: () => void;
   disconnect: () => Promise<void>;
+  /** Sign and send one transaction with the connected wallet. */
+  signAndSend: (receiverId: string, actions: WalletAction[]) => Promise<unknown>;
+}
+
+export interface WalletAction {
+  type: 'FunctionCall';
+  params: { methodName: string; args: object; gas: string; deposit: string };
 }
 
 const Ctx = createContext<WalletCtx>({
@@ -28,6 +35,9 @@ const Ctx = createContext<WalletCtx>({
   ready: false,
   connect: () => {},
   disconnect: async () => {},
+  signAndSend: async () => {
+    throw new Error('Wallet not ready');
+  },
 });
 
 async function loadSelector() {
@@ -78,6 +88,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!selector) return;
       const wallet = await selector.wallet();
       await wallet.signOut();
+    },
+    signAndSend: async (receiverId, actions) => {
+      if (!selector || !accountId) throw new Error('Connect a NEAR wallet first');
+      const [wallet, { actionCreators }] = await Promise.all([selector.wallet(), import('@near-js/transactions')]);
+      const najActions = actions.map((a) =>
+        actionCreators.functionCall(a.params.methodName, a.params.args, BigInt(a.params.gas), BigInt(a.params.deposit)),
+      );
+      return wallet.signAndSendTransaction({ signerId: accountId, receiverId, actions: najActions });
     },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

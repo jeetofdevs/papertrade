@@ -3766,3 +3766,27 @@ html.uwuless .chart-scene .sky-comet {
     width: 112px;
   }
 }
+
+/* ---------- Nitro Pool account ---------- */
+.pool-card { display: grid; gap: 14px; margin-top: 16px; }
+.pool-card h2 { margin: 0; font-size: 18px; }
+.pool-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pool-head .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pool-balances { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pool-balances > div { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 4px; }
+.pool-balances b { font-size: 18px; }
+.pool-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.pool-tabs .seg-btn { font-size: 13px; }
+.pool-tab-on { color: #03130d !important; background: var(--mint); }
+.pool-go { width: 100%; margin-top: 10px; }
+.pool-address { display: grid; gap: 10px; }
+.pool-copy { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.pool-copy code { overflow-wrap: anywhere; font-size: 13px; }
+.pool-rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); }
+.pool-rules b { color: var(--text); }
+@media (max-width: 640px) {
+  .pool-balances { grid-template-columns: 1fr 1fr; }
+  .pool-balances > div:last-child { grid-column: span 2; }
+  .pool-copy { grid-template-columns: minmax(0, 1fr) auto; }
+  .pool-copy .label { grid-column: span 2; }
+}

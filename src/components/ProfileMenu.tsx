@@ -108,6 +108,15 @@ export function ProfileMenu() {
             <button className="pm-link" onClick={() => go('#/profile')}>
               Profile & stats
             </button>
+            <button
+              className="pm-link"
+              onClick={() => {
+                go('#/profile');
+                setTimeout(() => document.getElementById('pool')?.scrollIntoView({ behavior: 'smooth' }), 60);
+              }}
+            >
+              Deposit / withdraw <span className="muted small">Nitro Pool</span>
+            </button>
             <button className="pm-link" onClick={() => go('#/trade')}>
               Positions <span className="count">{acct.positions.length}</span>
             </button>

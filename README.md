@@ -34,7 +34,9 @@ Optional variables (Settings → Variables), read at build time:
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `VITE_NEAR_NETWORK` | `mainnet` | `mainnet` or `testnet` |
-| `VITE_CONTRACT_ID` | _(empty)_ | NEAR contract account used for wallet sign-in |
+| `VITE_CONTRACT_ID` | _(empty)_ | The Nitro Pool contract (also the pool's deposit address). The pool card stays off until it is set |
+| `VITE_KEEPER_URL` | _(empty)_ | Public URL of the keeper service. Enables "paste a transaction hash" for plain transfers |
+| `VITE_NEAR_RPC` | `https://free.rpc.fastnear.com` | NEAR RPC used for reads |
 | `VITE_ORDERLY_BROKER_ID` | _(empty)_ | Your Orderly broker (builder) ID. Live mode stays off until it is set |
 | `VITE_NIA_IMAGE` | _(empty)_ | Optional custom mascot illustration (for example `/nia.png` placed in `public/`) |
 | `VITE_ORDERLY_NETWORK` | `mainnet` | Orderly network for Live mode. Leave unset for real trading on mainnet |
@@ -53,6 +55,52 @@ Nitro pool behind Live trades.
    take profit. Max leverage follows each Orderly market.
 
 
+## Nitro Pool (our own USDC pool on NEAR)
+
+`contract/` is a NEAR smart contract that holds the pool. The contract account is the pool's deposit address,
+and every user's balance is the sum of their transactions with it:
+
+- **Deposit button** (Profile → Nitro Pool account): one `ft_transfer_call` from the user's NEAR wallet,
+  credited by the contract immediately.
+- **Plain transfer to the pool address** (wallet app, exchange): the keeper sees the USDC transfer and credits
+  the sender, or the NEAR account written in the memo. Each transfer is credited once, and the contract refuses
+  to credit more than the USDC it holds but does not already owe.
+- Winners are paid from the vault, losers' wagers go to the vault (and earn NITRO). Each open position reserves
+  its maximum payout. The owner can pause, tune limits and collect fees, but cannot move user balances.
+
+Launch with small limits (`set_config`) until the contract has been audited. Oracle prices are pushed every
+10 s, so a faster interval reduces how stale a close price can be.
+
+**Deploy (near-cli-rs, mainnet):**
+
+```bash
+cd contract && cargo near build non-reproducible-wasm   # -> target/near/nitro_vault.wasm
+near contract deploy nitro-pool.near use-file target/near/nitro_vault.wasm \
+  with-init-call new json-args '{"owner":"you.near","usdc":"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1","oracle":"nitro-oracle.near"}' \
+  prepaid-gas '100 Tgas' attached-deposit '0 NEAR' network-config mainnet sign-with-keychain send
+# Register the pool on the USDC contract so it can receive USDC
+near contract call-function as-transaction 17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 storage_deposit \
+  json-args '{"account_id":"nitro-pool.near"}' prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' \
+  sign-as you.near network-config mainnet sign-with-keychain send
+```
+
+Then seed the vault by depositing USDC with msg `"vault"`, set `VITE_CONTRACT_ID=nitro-pool.near` on the web
+service, and run the keeper.
+
+**Keeper** (`keeper/`, a second Railway service with root directory `keeper`, start command `npm start`):
+
+| Variable | Notes |
+| --- | --- |
+| `CONTRACT_ID` | The pool contract |
+| `ORACLE_ACCOUNT_ID` / `ORACLE_PRIVATE_KEY` | The oracle account set in `new` and its `ed25519:` key. Keep a little NEAR on it for gas |
+| `NEAR_RPC_URL` | Optional, default `https://free.rpc.fastnear.com` |
+| `NEARBLOCKS_API_KEY` | Optional, raises NearBlocks rate limits for the deposit scan |
+| `PRICE_INTERVAL_MS` / `DEPOSIT_INTERVAL_MS` | Optional, default 10000 / 20000 |
+
+The keeper pushes prices (Binance, then Binance US, then Coinbase), closes positions past max loss or take
+profit, scans NearBlocks for plain transfers to the pool, and serves `GET /health` and `POST /claim`
+(`{ txHash, accountId }`). Set its public URL as `VITE_KEEPER_URL`.
+
 ## Auto deploy with GitHub Actions
 
 `.github/workflows/railway.yml` deploys to Railway on every push, even if Railway's own auto-deploy is off.
@@ -67,4 +115,7 @@ Add two repository secrets (GitHub → Settings → Secrets and variables → Ac
 - `src/lib/prices.ts`: live/simulated price feed
 - `src/lib/wallet.tsx`: NEAR wallet connection
 - `src/pages/`: Trade, Vault, Leaderboard, $NITRO
+- `src/lib/pool.ts`, `src/components/PoolAccountCard.tsx`: Nitro Pool reads, deposit and withdraw
+- `contract/`: Nitro Pool smart contract (Rust, `cargo test`)
+- `keeper/`: oracle, keeper and deposit indexer (`npm test` inside `keeper/`)
 - `server.js`: dependency-free static server for Railway

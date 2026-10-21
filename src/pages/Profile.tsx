@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Avatar } from '../components/Avatar';
+import { PoolAccountCard } from '../components/PoolAccountCard';
 import { ShareCard, ShareData } from '../components/ShareCard';
 import { toast } from '../components/Toasts';
 import { TokenIcon } from '../components/TokenIcon';
@@ -116,6 +117,8 @@ export function Profile() {
           <b className="mono">${usd(st.equity)}</b>
         </div>
       </section>
+
+      <PoolAccountCard />
 
       <div className="cards">
         <Stat label="Realised PnL" value={signedUsd(st.realizedPnl)} accent={st.realizedPnl > 0} />
