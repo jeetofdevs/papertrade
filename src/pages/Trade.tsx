@@ -40,15 +40,14 @@ export function Trade() {
       <MarketBar market={market} onChange={pick} />
       {live ? (
         LIVE_AVAILABLE ? (
-          <Suspense fallback={<div className="panel empty">Loading Orderly…</div>}>
+          <Suspense fallback={<div className="panel empty">Loading…</div>}>
             <LiveTrade market={market} />
           </Suspense>
         ) : (
           <div className="panel pad live-off">
             <h3>Live mode is not set up yet</h3>
             <p className="muted">
-              Live trading runs on Orderly Network and needs this site&apos;s Orderly broker ID. Set{' '}
-              <code>VITE_ORDERLY_BROKER_ID</code> in Railway and redeploy. Until then, use Demo mode.
+              Live trading is coming soon. Until then, use Demo mode.
             </p>
           </div>
         )

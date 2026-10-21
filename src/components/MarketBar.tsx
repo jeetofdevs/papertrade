@@ -66,7 +66,7 @@ export function MarketBar({ market, onChange }: { market: Market; onChange: (m: 
           <b className="mono">{price(t?.low24h)}</b>
         </div>
         <div className="hide-sm">
-          <span className="label" title="Binance spot 24h volume">Market vol 24h</span>
+          <span className="label">Market vol 24h</span>
           <b className="mono">${compact(st.marketVolume24h)}</b>
         </div>
         <div>

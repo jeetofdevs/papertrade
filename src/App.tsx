@@ -113,7 +113,7 @@ export function App() {
             </button>
           )}
           {inApp && mode === 'live' && (
-            <span className="balance mono" title="Orderly account value">
+            <span className="balance mono" title="Live account value">
               {usd(live.accountValue)} <span className="muted">USDC live</span>
             </span>
           )}
@@ -131,7 +131,7 @@ export function App() {
         {!inApp ? (
           <Landing />
         ) : mode === 'live' && LIVE_AVAILABLE ? (
-          <Suspense fallback={<div className="panel empty">Loading Orderly…</div>}>
+          <Suspense fallback={<div className="panel empty">Loading…</div>}>
             <OrderlyRoot>{ROUTES[route].el}</OrderlyRoot>
           </Suspense>
         ) : (

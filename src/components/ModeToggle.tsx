@@ -11,7 +11,7 @@ export function ModeToggle() {
       <button
         className={`mode-btn ${mode === 'live' ? 'mode-on mode-real' : ''}`}
         onClick={() => setSetting('mode', 'live')}
-        title="Real USDC on Orderly Network"
+        title="Real USDC"
       >
         Live
       </button>

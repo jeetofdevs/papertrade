@@ -50,7 +50,7 @@ const FAQ = [
   ],
   [
     'Is this real money?',
-    `Demo mode gives every account ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC with up to 1000x. Live mode trades real USDC on Orderly Network's shared order book through an EVM wallet, with each market's own leverage limit.`,
+    `Demo mode gives every account ${FAUCET_AMOUNT.toLocaleString('en-US')} demo USDC with up to 1000x. Live mode trades real USDC, with each market's own leverage limit.`,
   ],
 ];
 
@@ -201,7 +201,7 @@ export function Landing() {
         </div>
         <div className="hero3-copy">
           <span className="hero2-pill">
-            <span className="near-dot" /> Built on NEAR · Live trading on Orderly
+            <span className="near-dot" /> Built on NEAR
           </span>
           <h1>
             Trade with <span className="hero2-grad">{MAX_LEVERAGE}x</span> leverage. Lose only your wager.
@@ -261,12 +261,6 @@ export function Landing() {
           <TokenIcon market="NEAR" size={22} /> NEAR Protocol
         </span>
         <span className="lp-logo">
-          <span className="lp-logo-mark">◆</span> Orderly Network
-        </span>
-        <span className="lp-logo">
-          <span className="lp-logo-mark lp-logo-bn">◈</span> Binance market data
-        </span>
-        <span className="lp-logo">
           <span className="lp-logo-mark">⬡</span> Meteor · HERE · MyNearWallet
         </span>
       </section>
@@ -288,7 +282,7 @@ export function Landing() {
       <section className="lp-section">
         <div className="lp-head">
           <h2>Markets</h2>
-          <span className="muted small">Live prices and 24h volume from Binance</span>
+          <span className="muted small">Live prices and 24h volume</span>
         </div>
         <div className="lp-markets">
           {MARKETS.map((m) => {
@@ -389,8 +383,8 @@ export function Landing() {
           </div>
           <div className="panel bento-card bento-live">
             <span className="bento-kicker">Live</span>
-            <h3>Real USDC on Orderly</h3>
-            <p className="muted">Switch to Live and your orders go to Orderly Network&apos;s shared order book.</p>
+            <h3>Real USDC</h3>
+            <p className="muted">Switch to Live and trade with real USDC.</p>
           </div>
         </div>
       </section>
@@ -435,7 +429,7 @@ export function Landing() {
         <ol className="roadmap">
           {[
             ['Now', 'Demo trading up to 1000x, take profit, quests, PnL cards, UWU mode', true],
-            ['Now', 'Live trading with real USDC on Orderly Network', true],
+            ['Now', 'Live trading with real USDC', true],
             ['Next', 'Nitro smart contract on NEAR with a USDC vault', false],
             ['Next', '$NITRO token claims for loss-mined balances', false],
             ['Later', 'More markets, trading competitions and referral rewards', false],

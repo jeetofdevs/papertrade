@@ -40,9 +40,7 @@ const COLUMNS: Array<{ title: string; links: Array<[string, string]> }> = [
     title: 'Ecosystem',
     links: [
       ['NEAR Protocol', 'https://near.org'],
-      ['Orderly Network', 'https://orderly.network'],
       ['NearBlocks', 'https://nearblocks.io'],
-      ['Binance market data', 'https://www.binance.com/en/markets'],
     ],
   },
 ];
@@ -73,7 +71,7 @@ export function Footer() {
           <span className="foot2-sep">·</span>
           NEAR {NETWORK}
           <span className="foot2-sep">·</span>
-          {mode === 'live' ? (LIVE_AVAILABLE ? 'Orderly live' : 'Orderly not set up') : 'Demo mode'}
+          {mode === 'live' ? (LIVE_AVAILABLE ? 'Live mode' : 'Live coming soon') : 'Demo mode'}
         </div>
       </div>
 
@@ -85,7 +83,6 @@ export function Footer() {
             <span className="foot2-badge">
               <TokenIcon market="NEAR" size={16} /> Built on NEAR
             </span>
-            <span className="foot2-badge">◆ Live trading by Orderly</span>
           </div>
           {SOCIALS.length > 0 && (
             <div className="foot2-socials">
@@ -116,12 +113,9 @@ export function Footer() {
         <span>© {new Date().getFullYear()} Nitro</span>
         <span className="foot2-legal">
           {mode === 'live'
-            ? 'Live trading uses real funds on Orderly Network. Leverage trading is high risk.'
+            ? 'Live trading uses real funds. Leverage trading is high risk.'
             : 'Demo balances are not real money.'}{' '}
-          Not financial advice. Market data from Binance.
-        </span>
-        <span className="mono">
-          build {__BUILD_COMMIT__} · {__BUILD_TIME__}
+          Not financial advice.
         </span>
       </div>
     </footer>

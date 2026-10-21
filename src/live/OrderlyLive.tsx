@@ -289,7 +289,7 @@ function LiveOrderPanel({ market }: { market: Market }) {
       <div>
         <b>{market}-PERP</b>
         <span className="muted small">
-          {MARKET_NAME[market]} · Orderly{ORDERLY_NETWORK === 'testnet' ? ' testnet' : ''} · up to {maxLev}x
+          {MARKET_NAME[market]}{ORDERLY_NETWORK === 'testnet' ? ' · testnet' : ''} · up to {maxLev}x
         </span>
       </div>
     </div>
@@ -315,9 +315,9 @@ function LiveOrderPanel({ market }: { market: Market }) {
       <div className="panel order">
         {head}
         <div className="live-setup">
-          <h3>Trade real USDC on Orderly</h3>
+          <h3>Trade real USDC</h3>
           <p className="muted small">
-            Orders go to Orderly Network&apos;s shared order book, so there is no Nitro pool behind them. You need an EVM
+            You need an EVM
             wallet (MetaMask, Rabby…) and USDC on a supported chain such as Arbitrum.
           </p>
           <ol className="live-steps">
@@ -338,10 +338,10 @@ function LiveOrderPanel({ market }: { market: Market }) {
               )}
             </li>
             <li className={step > 2 ? 'done' : step === 2 ? 'now' : ''}>
-              Create your Orderly account
+              Create your trading account
               <span className="muted small">One signature, no gas.</span>
               {step === 2 && (
-                <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => run(createAccount, 'Orderly account created')}>
+                <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => run(createAccount, 'Trading account created')}>
                   Create account
                 </button>
               )}
@@ -365,7 +365,7 @@ function LiveOrderPanel({ market }: { market: Market }) {
     if (getSettings().childproof) {
       const ok = await confirmDialog({
         title: `${side === 'long' ? 'Long' : 'Short'} ${market} ${lev}x with real USDC?`,
-        body: `Margin ${usd(wager)} USDC for a ${usd(notional, 0)} USDC position on Orderly. Your isolated margin is the most you can lose.`,
+        body: `Margin ${usd(wager)} USDC for a ${usd(notional, 0)} USDC position. Your isolated margin is the most you can lose.`,
         confirmLabel: `Open ${side}`,
         danger: side === 'short',
       });
@@ -386,11 +386,11 @@ function LiveOrderPanel({ market }: { market: Market }) {
         throw new Error((e as Error)?.message === 'Order validation failed' ? 'Order not valid. See the note below the button.' : (e as Error)?.message);
       }
       // A rejected order does not throw, it returns success: false.
-      if (!result?.success) throw new Error((result as { message?: string })?.message || 'Orderly rejected the order');
+      if (!result?.success) throw new Error((result as { message?: string })?.message || 'The order was rejected');
       const addr = wallet.wallet?.accounts[0]?.address;
       if (addr) recordLiveOpen(addr, { at: Date.now(), market, usd: notional, leverage: lev });
       sound.open();
-    }, `Opened ${side} ${market} ${lev}x on Orderly`);
+    }, `Opened ${side} ${market} ${lev}x`);
   };
 
   return (
@@ -475,7 +475,7 @@ function LiveOrderPanel({ market }: { market: Market }) {
         <TokenIcon market={market} size={22} />
         {busy ? 'Sending…' : `${side === 'long' ? 'Long' : 'Short'} ${market} ${lev}x`}
       </button>
-      {wager > (freeCollateral ?? 0) && <p className="hint err">Not enough free USDC on Orderly. Deposit first.</p>}
+      {wager > (freeCollateral ?? 0) && <p className="hint err">Not enough free USDC. Deposit first.</p>}
       {metaState.submitted &&
         Object.values(metaState.errors ?? {})
           .filter(Boolean)
@@ -525,10 +525,10 @@ function DepositModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal panel pad confirm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <h3>Deposit USDC to Orderly</h3>
+        <h3>Deposit USDC</h3>
         {!chain || !usdc ? (
           <>
-            <p className="muted">Your wallet is on a chain Orderly does not support. Switch to Arbitrum to deposit.</p>
+            <p className="muted">Your wallet is on a chain that is not supported. Switch to Arbitrum to deposit.</p>
             <button className="btn btn-primary" onClick={() => wallet.setChain({ chainId: DEFAULT_CHAIN })}>
               Switch to Arbitrum
             </button>
@@ -576,7 +576,7 @@ function LivePositions() {
   const close = async (r: (typeof list)[number]) => {
     if (getSettings().childproof) {
       const ok = await confirmDialog({
-        title: `Close ${r.symbol.split('_')[1]} on Orderly?`,
+        title: `Close ${r.symbol.split('_')[1]} ?`,
         body: `Closes at market for about ${signed(r.unrealized_pnl)} USDC.`,
         confirmLabel: 'Close position',
       });
@@ -623,7 +623,7 @@ function LivePositions() {
     <div className="panel positions">
       <div className="tabs">
         <span className="tab tab-on">
-          Orderly positions <span className="count">{list.length}</span>
+          Live positions <span className="count">{list.length}</span>
         </span>
         {list.length > 0 && (
           <div className="tabs-right">
@@ -635,9 +635,9 @@ function LivePositions() {
       </div>
       <div className="table-wrap">
         {state.status < AccountStatusEnum.EnableTrading ? (
-          <p className="empty">Enable trading to see your Orderly positions.</p>
+          <p className="empty">Enable trading to see your live positions.</p>
         ) : list.length === 0 ? (
-          <p className="empty">No open positions on Orderly.</p>
+          <p className="empty">No open live positions.</p>
         ) : (
           <table className="table">
             <thead>

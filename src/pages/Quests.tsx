@@ -105,8 +105,8 @@ export function Quests() {
               {!LIVE_AVAILABLE
                 ? 'Live trading is not set up on this site yet, so quests cannot be tracked.'
                 : mode !== 'live'
-                  ? 'Demo trades do not count. Switch to Live and trade on Orderly to make progress.'
-                  : 'Connect your wallet and enable trading in Live mode to load your Orderly trades.'}
+                  ? 'Demo trades do not count. Switch to Live to make progress.'
+                  : 'Connect your wallet and enable trading in Live mode to load your trades.'}
             </p>
           </div>
           {LIVE_AVAILABLE && mode !== 'live' && (
