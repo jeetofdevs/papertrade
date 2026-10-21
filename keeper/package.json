@@ -1,0 +1,14 @@
+{
+  "name": "nitro-keeper",
+  "private": true,
+  "type": "module",
+  "description": "Oracle, keeper and deposit indexer for the Nitro vault contract",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=22.12" },
+  "dependencies": {
+    "near-api-js": "7.3.1"
+  }
+}
