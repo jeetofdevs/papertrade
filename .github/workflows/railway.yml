@@ -20,11 +20,11 @@ jobs:
       SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check secrets
+      - name: Deploy
+        # Skipped (not failed) when the Railway secrets are not set, e.g. when the site is hosted on Vercel.
         run: |
           if [ -z "$RAILWAY_TOKEN" ] || [ -z "$SERVICE_ID" ]; then
-            echo "Add RAILWAY_TOKEN and RAILWAY_SERVICE_ID in the repo's Actions secrets to enable deploys."
-            exit 1
+            echo "::notice::Railway secrets not set, skipping the Railway deploy."
+            exit 0
           fi
-      - name: Deploy
-        run: railway up --service="$SERVICE_ID"
+          railway up --service="$SERVICE_ID"
