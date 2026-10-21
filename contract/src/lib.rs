@@ -44,6 +44,10 @@ pub struct Config {
     pub max_open_positions: u32,
     /// NITRO points (6 decimals) minted per 1 USDC lost.
     pub nitro_per_usdc: u32,
+    /// NITRO points per 100 USDC of position size (wager x leverage) on real trades.
+    pub points_per_100_usd: u32,
+    /// A position must stay open this long for its volume to earn points.
+    pub points_min_hold_sec: u64,
     pub markets: Vec<String>,
     /// Price spread charged on opens and closes, in basis points (0 = trade at the oracle price).
     pub spread_bps: u32,
@@ -89,6 +93,8 @@ pub struct Account {
     pub trades: u32,
     /// USDC locked in withdrawal requests waiting for review.
     pub pending_withdraw: U128,
+    /// $NITRO tokens received from conversions (base units).
+    pub nitro_tokens_received: U128,
     /// The new-user bonus was claimed (once per account).
     pub promo_claimed: bool,
     /// Bonus balance, usable for trading only (not withdrawable) until the turnover is reached.
@@ -121,12 +127,18 @@ pub struct NitroConversion {
     pub token: Option<AccountId>,
     /// Token base units paid per 1 NITRO point (points have 6 decimals).
     pub tokens_per_point: U128,
+    /// Tokens still available for conversions (the points pool). Conversions stop when it runs out.
+    pub budget: U128,
+    /// Most tokens one account can receive in total (0 = no limit).
+    pub max_per_account: U128,
+    /// Most tokens converted per UTC day across everyone (0 = no limit), to spread out sell pressure.
+    pub daily_limit: U128,
     pub open: bool,
 }
 
 #[near(serializers = [json])]
 pub struct NitroView {
-    /// NITRO points minted from real USDC losses, all time.
+    /// NITRO points earned from real USDC trading volume, all time.
     pub total_minted: U128,
     pub total_converted: U128,
     pub conversion: NitroConversion,
@@ -319,6 +331,8 @@ pub struct Contract {
     nitro_minted: u128,
     nitro_converted: u128,
     nitro_conversion: NitroConversion,
+    conv_day: u64,
+    conv_day_used: u128,
 }
 
 fn mul_div(a: u128, b: u128, c: u128) -> u128 {
@@ -343,7 +357,9 @@ impl Contract {
                 profit_fee_bps: 1000,
                 max_price_age_sec: 30,
                 max_open_positions: 10,
-                nitro_per_usdc: 10,
+                nitro_per_usdc: 0,
+                points_per_100_usd: 1,
+                points_min_hold_sec: 60,
                 markets: vec!["NEAR".into(), "BTC".into(), "ETH".into(), "SOL".into()],
                 spread_bps: 0,
                 min_deposit: U128(1_000_000),
@@ -379,7 +395,16 @@ impl Contract {
             users: Vector::new(b"u"),
             nitro_minted: 0,
             nitro_converted: 0,
-            nitro_conversion: NitroConversion { token: None, tokens_per_point: U128(0), open: false },
+            nitro_conversion: NitroConversion {
+                token: None,
+                tokens_per_point: U128(0),
+                budget: U128(0),
+                max_per_account: U128(0),
+                daily_limit: U128(0),
+                open: false,
+            },
+            conv_day: 0,
+            conv_day_used: 0,
         }
     }
 
@@ -494,10 +519,19 @@ impl Contract {
 
     /// Owner: configure the $NITRO token conversion (at token launch). The contract must hold enough
     /// $NITRO tokens to pay conversions; the owner sends them to this account.
-    pub fn set_nitro_conversion(&mut self, token: Option<AccountId>, tokens_per_point: U128, open: bool) {
+    /// `budget` is the token pool for points (e.g. 10% of supply); conversions can never exceed it.
+    pub fn set_nitro_conversion(
+        &mut self,
+        token: Option<AccountId>,
+        tokens_per_point: U128,
+        budget: U128,
+        max_per_account: U128,
+        daily_limit: U128,
+        open: bool,
+    ) {
         self.assert_owner();
-        require!(!open || (token.is_some() && tokens_per_point.0 > 0), "Set the token and rate before opening");
-        self.nitro_conversion = NitroConversion { token, tokens_per_point, open };
+        require!(!open || (token.is_some() && tokens_per_point.0 > 0 && budget.0 > 0), "Set the token, rate and budget before opening");
+        self.nitro_conversion = NitroConversion { token, tokens_per_point, budget, max_per_account, daily_limit, open };
     }
 
     /// Convert NITRO points into $NITRO tokens. Attach 0.00125 NEAR so the token can register you;
@@ -512,6 +546,20 @@ impl Contract {
         require!(points.0 > 0 && points.0 <= acct.nitro.0, "Not enough NITRO points");
         let amount = points.0.checked_mul(conv.tokens_per_point.0).expect("overflow") / 1_000_000;
         require!(amount > 0, "Amount too small");
+        require!(amount <= conv.budget.0, "The $NITRO points pool is used up");
+        require!(
+            conv.max_per_account.0 == 0 || acct.nitro_tokens_received.0 + amount <= conv.max_per_account.0,
+            "Above the per-account conversion limit"
+        );
+        let day = env::block_timestamp() / (86_400 * NANOS);
+        if day != self.conv_day {
+            self.conv_day = day;
+            self.conv_day_used = 0;
+        }
+        require!(conv.daily_limit.0 == 0 || self.conv_day_used + amount <= conv.daily_limit.0, "Today's conversion limit is reached, try again tomorrow");
+        self.conv_day_used += amount;
+        self.nitro_conversion.budget = U128(conv.budget.0 - amount);
+        acct.nitro_tokens_received = U128(acct.nitro_tokens_received.0 + amount);
         acct.nitro = U128(acct.nitro.0 - points.0);
         self.accounts.insert(who.clone(), acct);
         self.nitro_converted += points.0;
@@ -524,14 +572,17 @@ impl Contract {
         Promise::new(token.clone())
             .function_call("storage_deposit".to_string(), register.into_bytes(), env::attached_deposit(), Gas::from_tgas(10))
             .then(Promise::new(token).function_call("ft_transfer".to_string(), transfer.into_bytes(), NearToken::from_yoctonear(1), Gas::from_tgas(15)))
-            .then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(10)).on_convert(who, points))
+            .then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(10)).on_convert(who, points, U128(amount)))
     }
 
     #[private]
-    pub fn on_convert(&mut self, account: AccountId, points: U128, #[callback_result] result: Result<(), PromiseError>) {
+    pub fn on_convert(&mut self, account: AccountId, points: U128, amount: U128, #[callback_result] result: Result<(), PromiseError>) {
         if result.is_err() {
             let mut acct = self.account_or_default(&account);
             acct.nitro = U128(acct.nitro.0 + points.0);
+            acct.nitro_tokens_received = U128(acct.nitro_tokens_received.0 - amount.0);
+            self.nitro_conversion.budget = U128(self.nitro_conversion.budget.0 + amount.0);
+            self.conv_day_used = self.conv_day_used.saturating_sub(amount.0);
             self.accounts.insert(account.clone(), acct);
             self.nitro_converted -= points.0;
             let mut e = LedgerEntry::new("nitro_refund", 0);
@@ -1166,6 +1217,15 @@ impl Contract {
         }
         if !bonus {
             acct.balance = U128(acct.balance.0 + payout);
+        }
+        // Points for real trading volume (position size), if the position was held long enough.
+        let held = env::block_timestamp().saturating_sub(pos.opened_at) / NANOS;
+        if held >= self.config.points_min_hold_sec {
+            let real_wager = wager - pos.bonus_virtual.0;
+            let points = mul_div(real_wager * pos.leverage as u128, self.config.points_per_100_usd as u128, 100);
+            minted += points;
+            acct.nitro = U128(acct.nitro.0 + points);
+            self.nitro_minted += points;
         }
         acct.trades += 1;
         let mut e = LedgerEntry::new("close", payout);

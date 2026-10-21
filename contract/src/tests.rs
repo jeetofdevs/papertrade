@@ -113,7 +113,7 @@ fn loss_goes_to_vault_and_mints_nitro() {
     t.c.close_position(id, None);
     assert_eq!(t.balance("alice.near"), 980 * USDC);
     assert_eq!(t.c.get_vault().liquidity.0, 1_000_020 * USDC);
-    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 20 * USDC * 10);
+    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 0); // points come from volume, not losses
 }
 
 #[test]
@@ -563,54 +563,6 @@ fn leaderboard_lists_every_user_once() {
 }
 
 #[test]
-fn nitro_total_counts_only_real_losses() {
-    let mut t = setup();
-    assert_eq!(t.c.get_nitro().total_minted.0, 0);
-    t.as_("alice.near");
-    let id = t.c.open_position("NEAR".into(), true, U128(100 * USDC), 10, None, None);
-    t.price("NEAR", 2_940_000_00);
-    t.as_("alice.near");
-    t.c.close_position(id, None);
-    assert_eq!(t.c.get_nitro().total_minted.0, 20 * USDC * 10);
-}
-
-#[test]
-#[should_panic(expected = "Conversion opens at the $NITRO token launch")]
-fn conversion_is_closed_until_launch() {
-    let mut t = setup();
-    t.as_("alice.near");
-    let _ = t.c.convert_nitro(U128(1));
-}
-
-#[test]
-fn conversion_spends_points_and_refunds_on_failure() {
-    let mut t = setup();
-    t.as_("alice.near");
-    let id = t.c.open_position("NEAR".into(), true, U128(100 * USDC), 10, None, None);
-    t.price("NEAR", 2_940_000_00);
-    t.as_("alice.near");
-    t.c.close_position(id, None); // 200 NITRO points
-    t.as_("owner.near");
-    t.c.set_nitro_conversion(Some(acc("nitro-token.near")), U128(1_000_000_000_000_000_000), true); // 1 token (18 dp) per point
-    t.as_("alice.near");
-    let _ = t.c.convert_nitro(U128(50 * USDC));
-    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 150 * USDC);
-    assert_eq!(t.c.get_nitro().total_converted.0, 50 * USDC);
-    t.as_("nitro.near");
-    t.c.on_convert(acc("alice.near"), U128(50 * USDC), Err(PromiseError::Failed));
-    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 200 * USDC);
-    assert_eq!(t.c.get_nitro().total_converted.0, 0);
-}
-
-#[test]
-#[should_panic(expected = "Set the token and rate")]
-fn conversion_needs_token_and_rate() {
-    let mut t = setup();
-    t.as_("owner.near");
-    t.c.set_nitro_conversion(None, U128(0), true);
-}
-
-#[test]
 #[should_panic(expected = "Deposit above the maximum")]
 fn deposits_above_1000_are_refused() {
     let mut t = setup();
@@ -789,4 +741,92 @@ fn slippage_grows_with_size() {
     let big = t.c.open_position("NEAR".into(), false, U128(200 * USDC), 100, None, None);
     let e2 = t.c.get_position(big).unwrap().entry.0;
     assert_eq!(e2, mul_div(3 * P, 1_000_000 - 250, 1_000_000));
+}
+
+fn traded(t: &mut T, who: &str, wager: u128, lev: u32, hold: u64) {
+    t.as_(who);
+    let id = t.c.open_position("NEAR".into(), true, U128(wager * USDC), lev, None, None);
+    t.later(hold);
+    t.price("NEAR", 3 * P);
+    t.as_(who);
+    t.c.close_position(id, None);
+}
+
+#[test]
+fn points_come_from_leveraged_volume_held_a_minute() {
+    let mut t = setup();
+    traded(&mut t, "alice.near", 10, 100, 61); // $1,000 size -> 10 points
+    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 10 * USDC);
+    traded(&mut t, "alice.near", 10, 100, 5); // quick flip: no points
+    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 10 * USDC);
+    assert_eq!(t.c.get_nitro().total_minted.0, 10 * USDC);
+}
+
+#[test]
+#[should_panic(expected = "Conversion opens at the $NITRO token launch")]
+fn conversion_is_closed_until_launch() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let _ = t.c.convert_nitro(U128(1));
+}
+
+const TOKEN: u128 = 1_000_000_000_000_000_000; // 18 decimals
+
+fn open_conversion(t: &mut T, budget: u128, per_account: u128, daily: u128) {
+    t.as_("owner.near");
+    t.c.set_nitro_conversion(Some(acc("nitro-token.near")), U128(100 * TOKEN), U128(budget * TOKEN), U128(per_account * TOKEN), U128(daily * TOKEN), true);
+}
+
+#[test]
+fn conversion_spends_points_and_refunds_on_failure() {
+    let mut t = setup();
+    traded(&mut t, "alice.near", 100, 100, 61); // 100 points
+    open_conversion(&mut t, 1_000_000, 0, 0);
+    t.as_("alice.near");
+    let _ = t.c.convert_nitro(U128(40 * USDC)); // 4,000 tokens
+    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 60 * USDC);
+    assert_eq!(t.c.get_nitro().conversion.budget.0, (1_000_000 - 4_000) * TOKEN);
+    t.as_("nitro.near");
+    t.c.on_convert(acc("alice.near"), U128(40 * USDC), U128(4_000 * TOKEN), Err(PromiseError::Failed));
+    assert_eq!(t.c.get_account(acc("alice.near")).nitro.0, 100 * USDC);
+    assert_eq!(t.c.get_nitro().conversion.budget.0, 1_000_000 * TOKEN);
+}
+
+#[test]
+#[should_panic(expected = "points pool is used up")]
+fn conversion_never_exceeds_the_pool() {
+    let mut t = setup();
+    traded(&mut t, "alice.near", 100, 100, 61); // 100 points = 10,000 tokens
+    open_conversion(&mut t, 5_000, 0, 0);
+    t.as_("alice.near");
+    let _ = t.c.convert_nitro(U128(100 * USDC));
+}
+
+#[test]
+#[should_panic(expected = "per-account conversion limit")]
+fn conversion_respects_the_per_account_limit() {
+    let mut t = setup();
+    traded(&mut t, "alice.near", 100, 100, 61);
+    open_conversion(&mut t, 1_000_000, 3_000, 0);
+    t.as_("alice.near");
+    let _ = t.c.convert_nitro(U128(20 * USDC)); // 2,000: fine
+    let _ = t.c.convert_nitro(U128(20 * USDC)); // 4,000 total: over 3,000
+}
+
+#[test]
+#[should_panic(expected = "Today's conversion limit")]
+fn conversion_respects_the_daily_limit() {
+    let mut t = setup();
+    traded(&mut t, "alice.near", 100, 100, 61);
+    open_conversion(&mut t, 1_000_000, 0, 5_000);
+    t.as_("alice.near");
+    let _ = t.c.convert_nitro(U128(60 * USDC)); // 6,000 > 5,000 per day
+}
+
+#[test]
+#[should_panic(expected = "Set the token, rate and budget")]
+fn conversion_needs_token_rate_and_budget() {
+    let mut t = setup();
+    t.as_("owner.near");
+    t.c.set_nitro_conversion(Some(acc("nitro-token.near")), U128(1), U128(0), U128(0), U128(0), true);
 }
