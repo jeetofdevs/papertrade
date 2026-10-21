@@ -12,11 +12,14 @@
 import http from 'node:http';
 import { Account, JsonRpcProvider } from 'near-api-js';
 import { needsClose, parseDeposits, toPrice8 } from './deposits.mjs';
+import { keeperKeyPair } from './keys.mjs';
 
 const env = (k, d) => process.env[k] ?? d;
-const CONTRACT = env('CONTRACT_ID');
-const ORACLE = env('ORACLE_ACCOUNT_ID');
-const KEY = env('ORACLE_PRIVATE_KEY'); // "ed25519:..."
+const CONTRACT = env('CONTRACT_ID', 'nitroonnear.near');
+// The oracle is the contract account itself, signing with the limited keeper key from KEEPER_SEED
+// (added by deploy.mjs). An explicit ORACLE_ACCOUNT_ID / ORACLE_PRIVATE_KEY still works.
+const ORACLE = env('ORACLE_ACCOUNT_ID', CONTRACT);
+const KEY = env('ORACLE_PRIVATE_KEY') ?? (process.env.KEEPER_SEED ? keeperKeyPair(process.env.KEEPER_SEED).toString() : undefined);
 const USDC = env('USDC_CONTRACT', '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1');
 const RPC = env('NEAR_RPC_URL', 'https://free.rpc.fastnear.com');
 const NEARBLOCKS = env('NEARBLOCKS_API', 'https://api.nearblocks.io');
@@ -26,8 +29,8 @@ const DEPOSIT_MS = Number(env('DEPOSIT_INTERVAL_MS', 20_000));
 const PORT = Number(env('PORT', 8080));
 const MARKETS = env('MARKETS', 'NEAR,BTC,ETH,SOL').split(',');
 
-if (!CONTRACT || !ORACLE || !KEY) {
-  console.error('Set CONTRACT_ID, ORACLE_ACCOUNT_ID and ORACLE_PRIVATE_KEY');
+if (!KEY) {
+  console.error('Set KEEPER_SEED (or ORACLE_ACCOUNT_ID and ORACLE_PRIVATE_KEY)');
   process.exit(1);
 }
 

@@ -68,29 +68,32 @@ and every user's balance is the sum of their transactions with it:
 Launch with small limits (`set_config`) until the contract has been audited. Oracle prices are pushed every
 10 s, so a faster interval reduces how stale a close price can be.
 
-**Deploy (near-cli-rs, mainnet):** install `cargo-near` first (`cargo install cargo-near --locked`; on Linux it
-needs `libudev-dev`). The build is about 210 KB.
+**Deploy from GitHub (no local tools needed):**
 
-```bash
-cd contract && cargo near build non-reproducible-wasm   # -> target/near/nitro_vault.wasm
-near contract deploy nitroonnear.near use-file target/near/nitro_vault.wasm \
-  with-init-call new json-args '{"owner":"you.near","usdc":"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1","oracle":"nitro-oracle.near"}' \
-  prepaid-gas '100 Tgas' attached-deposit '0 NEAR' network-config mainnet sign-with-keychain send
-# Register the pool on the USDC contract so it can receive USDC
-near contract call-function as-transaction 17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 storage_deposit \
-  json-args '{"account_id":"nitroonnear.near"}' prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' \
-  sign-as you.near network-config mainnet sign-with-keychain send
-```
+1. Create the NEAR account `nitroonnear.near` and fund it with at least 3–5 NEAR (storage for the contract
+   and every user's history).
+2. GitHub → Settings → Secrets and variables → Actions → add:
+   - `NEAR_PRIVATE_KEY`: a full access key of `nitroonnear.near` (`ed25519:...`, exported from your wallet)
+   - `KEEPER_SEED`: any long random phrase (at least 16 characters). The keeper uses the same phrase.
+3. GitHub → Actions → **Deploy NEAR contract** → Run workflow. Optionally set the owner (the account that
+   reviews withdrawals; empty = `nitroonnear.near`).
 
-Then seed the vault by depositing USDC with msg `"vault"`, set `VITE_CONTRACT_ID=nitroonnear.near` on the web
-service, and run the keeper.
+The workflow tests and builds the contract, deploys and initialises it (first run only), adds a limited
+keeper key that can only call `push_prices`, `run_keeper` and `credit_transfers`, and registers the
+contract on USDC. Running it again is safe; an existing contract is only replaced when **upgrade** is ticked.
+
+To deploy by hand instead: `cd contract && cargo near build non-reproducible-wasm`, then
+`cd keeper && NEAR_PRIVATE_KEY=... KEEPER_SEED=... node deploy.mjs`.
+
+**Withdrawals are reviewed.** Users request a withdrawal (the amount is locked and they can cancel); the
+owner approves on the website's **Admin** page (USDC is sent) or rejects with a reason (the amount returns).
 
 **Keeper** (`keeper/`, a second Railway service with root directory `keeper`, start command `npm start`):
 
 | Variable | Notes |
 | --- | --- |
-| `CONTRACT_ID` | The pool contract |
-| `ORACLE_ACCOUNT_ID` / `ORACLE_PRIVATE_KEY` | The oracle account set in `new` and its `ed25519:` key. Keep a little NEAR on it for gas |
+| `CONTRACT_ID` | The pool contract (default `nitroonnear.near`) |
+| `KEEPER_SEED` | Same phrase as the GitHub secret; the keeper signs with the limited key derived from it |
 | `NEAR_RPC_URL` | Optional, default `https://free.rpc.fastnear.com` |
 | `NEARBLOCKS_API_KEY` | Optional, raises NearBlocks rate limits for the deposit scan |
 | `PRICE_INTERVAL_MS` / `DEPOSIT_INTERVAL_MS` | Optional, default 10000 / 20000 |

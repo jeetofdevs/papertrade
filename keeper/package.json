@@ -7,8 +7,12 @@
     "start": "node index.mjs",
     "test": "node --test"
   },
-  "engines": { "node": ">=22.12" },
+  "engines": {
+    "node": ">=22.12"
+  },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
     "near-api-js": "7.3.1"
   }
 }
