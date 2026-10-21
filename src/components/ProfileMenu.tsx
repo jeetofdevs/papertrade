@@ -7,7 +7,7 @@ import { dispatch, useStore } from '../lib/store';
 import { NETWORK, useWallet } from '../lib/wallet';
 import { Avatar } from './Avatar';
 import { useUserProfile } from '../lib/userProfile';
-import { isAdmin, usePool } from '../lib/pool';
+import { isAdmin, tradesFromLedger, usePool } from '../lib/pool';
 import { toast } from './Toasts';
 
 export function ProfileMenu() {
@@ -16,10 +16,9 @@ export function ProfileMenu() {
   const { mode } = useSettings();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const acct = account(state, traderId);
-  const st = profileStats(state, acct);
+  const demoAcct = account(state, traderId);
   const id = accountId ?? traderId;
-  const nextFaucet = acct.lastFaucet + FAUCET_COOLDOWN_MS - Date.now();
+  const nextFaucet = demoAcct.lastFaucet + FAUCET_COOLDOWN_MS - Date.now();
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +48,22 @@ export function ProfileMenu() {
   };
   const me = useUserProfile(id);
   const pool = usePool();
+  const live = mode === 'live';
+  // Live: real USDC numbers from the contract. Demo: the local demo account.
+  const acct = live
+    ? {
+        ...demoAcct,
+        usdc: pool.balance,
+        nitro: pool.nitro,
+        positions: pool.positions,
+        history: tradesFromLedger(pool.ledger),
+        pendingProfit: 0,
+        lpShares: 0,
+        realizedPnl: pool.totals.profit - pool.totals.loss,
+        volume: pool.totals.volume,
+      }
+    : demoAcct;
+  const st = profileStats(state, acct);
 
   const go = (hash: string) => {
     location.hash = hash;
@@ -84,14 +99,14 @@ export function ProfileMenu() {
           </div>
 
           <div className="pm-balance">
-            <span className="label">Account equity</span>
+            <span className="label">{live ? 'Account equity · real USDC' : 'Demo equity · not real money'}</span>
             <b className="mono">${usd(st.equity)}</b>
             <span className={`mono small ${st.openPnl >= 0 ? 'up' : 'down'}`}>{signedUsd(st.openPnl)} open PnL</span>
           </div>
 
           <div className="pm-grid">
             <div>
-              <span className="label">USDC</span>
+              <span className="label">{live ? 'USDC' : 'Demo USDC'}</span>
               <b className="mono">{usd(acct.usdc)}</b>
             </div>
             <div>
