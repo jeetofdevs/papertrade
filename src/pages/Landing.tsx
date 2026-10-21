@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LogoMark } from '../components/Logo';
 import { TokenIcon } from '../components/TokenIcon';
 import { useActivity } from '../lib/activity';
-import { FAUCET_AMOUNT, Market, MARKETS, MAX_LEVERAGE, NITRO_PER_USD_LOST } from '../lib/engine';
+import { FAUCET_AMOUNT, Market, MARKETS, MAX_LEVERAGE } from '../lib/engine';
 import { compact, pct, price, usd } from '../lib/format';
 import { getTicks, loadTicks, Point, usePrices } from '../lib/prices';
 import { useWallet } from '../lib/wallet';
@@ -46,7 +46,7 @@ const FAQ = [
   ],
   [
     'What is $NITRO?',
-    `Every USDC you lose mints ${NITRO_PER_USD_LOST} NITRO to your NEAR account, so even a max loss leaves you with something.`,
+    'Every $100 of position size (wager x leverage) on a real USDC trade held at least a minute earns 1 NITRO point. Points convert to the $NITRO token at launch.',
   ],
   [
     'Is this real money?',
@@ -207,8 +207,8 @@ export function Landing() {
             Trade with <span className="hero2-grad">{MAX_LEVERAGE}x</span> leverage. Lose only your wager.
           </h1>
           <p>
-            Long or short NEAR, BTC, ETH and SOL in one tap. Set a take profit, ride the rocket, and if it goes wrong
-            your loss mints $NITRO.
+            Long or short NEAR, BTC, ETH and SOL in one tap. Set a take profit, ride the rocket, and every trade earns
+            $NITRO points.
           </p>
           <div className="hero2-cta" ref={heroCta}>
             <button className="btn btn-primary btn-xl" onClick={connect} disabled={!ready}>
@@ -342,9 +342,9 @@ export function Landing() {
             </div>
           </div>
           <div className="panel bento-card bento-nitro">
-            <span className="bento-kicker">Loss mining</span>
-            <h3>Losses mint $NITRO</h3>
-            <p className="muted">{NITRO_PER_USD_LOST} NITRO for every USDC lost. Even a max loss leaves you something.</p>
+            <span className="bento-kicker">Volume mining</span>
+            <h3>Trade volume earns $NITRO</h3>
+            <p className="muted">1 NITRO point per $100 of position size on real trades. Points convert to $NITRO at launch.</p>
           </div>
           <div className="panel bento-card bento-quests">
             <span className="bento-kicker">Quests</span>
@@ -395,7 +395,7 @@ export function Landing() {
           <h2>$10 wager × 1000x</h2>
           <p className="muted">
             That is a $10,000 position. A 1% move your way pays <b className="up">+$100</b>. A 0.1% move against you
-            closes it at your max loss of <b className="down">$10</b>, and mints <b className="accent">100 NITRO</b>.
+            closes it at your max loss of <b className="down">$10</b>. Held a minute or more, it earns <b className="accent">100 NITRO points</b> either way.
           </p>
         </div>
         <div className="lp-calc mono">
@@ -451,7 +451,7 @@ export function Landing() {
             ['Connect', 'Sign in with Meteor, MyNearWallet or HERE. No sign-up, no KYC.'],
             ['Pick a wager', 'Choose what you are willing to lose and a leverage from 1x to 1000x.'],
             ['Win in USDC', 'Close any time. Profits are paid straight from the Nitro vault.'],
-            ['Lose into NITRO', `Every USDC lost mints ${NITRO_PER_USD_LOST} NITRO to your account.`],
+            ['Earn NITRO', 'Every $100 of position size earns 1 NITRO point, win or lose.'],
           ].map(([t, d], i) => (
             <li key={t} className="panel lp-step">
               <span className="lp-step-n mono">{String(i + 1).padStart(2, '0')}</span>

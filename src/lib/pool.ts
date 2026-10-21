@@ -694,12 +694,20 @@ export interface NitroStats {
   token: string | null;
   /** $NITRO tokens per NITRO point, in whole tokens (decimals applied when known). */
   tokensPerPointRaw: string;
+  /** Token base units still in the points pool, and per-account / daily caps (0 = none). */
+  budgetRaw: string;
+  maxPerAccountRaw: string;
+  dailyLimitRaw: string;
   open: boolean;
 }
 
 /** Network-wide NITRO numbers from the contract (real USDC losses only). */
 export async function loadNitroStats(): Promise<NitroStats> {
-  const n = await view<{ total_minted: string; total_converted: string; conversion: { token: string | null; tokens_per_point: string; open: boolean } }>(
+  const n = await view<{
+    total_minted: string;
+    total_converted: string;
+    conversion: { token: string | null; tokens_per_point: string; budget?: string; max_per_account?: string; daily_limit?: string; open: boolean };
+  }>(
     POOL_ID,
     'get_nitro',
   );
@@ -708,6 +716,9 @@ export async function loadNitroStats(): Promise<NitroStats> {
     totalConverted: fromUsdc(n.total_converted),
     token: n.conversion.token,
     tokensPerPointRaw: n.conversion.tokens_per_point,
+    budgetRaw: n.conversion.budget ?? '0',
+    maxPerAccountRaw: n.conversion.max_per_account ?? '0',
+    dailyLimitRaw: n.conversion.daily_limit ?? '0',
     open: n.conversion.open,
   };
 }

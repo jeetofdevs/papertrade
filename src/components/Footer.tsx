@@ -77,7 +77,7 @@ export function Footer() {
       <div className="foot2-main">
         <div className="foot2-brand">
           <Logo />
-          <p>1000x perpetuals on NEAR. Your wager is your max loss, and every loss mints $NITRO.</p>
+          <p>1000x perpetuals on NEAR. Your wager is your max loss, and every trade earns $NITRO points.</p>
           <div className="foot2-badges">
             <span className="foot2-badge">
               <TokenIcon market="NEAR" size={16} /> Built on NEAR

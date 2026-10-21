@@ -108,10 +108,13 @@ the USDC back with msg `"settle_near"`. Settle before approving large withdrawal
 backed by NEAR, not USDC, so a NEAR price drop is a loss for the vault. The Admin page lists every USDC and NEAR
 deposit read from the chain.
 
-**NITRO points and $NITRO.** Every USDC lost on a real trade earns 10 NITRO points on chain (`get_account`,
-total in `get_nitro`); demo trades never count. At token launch the owner sends $NITRO tokens to the contract
-account and calls `set_nitro_conversion(token, tokens_per_point, true)` (`tokens_per_point` in token base units
-per point; points have 6 decimals). Users then convert on the **$NITRO** page; failed transfers refund points.
+**NITRO points and $NITRO.** Real USDC trades held at least 60 s earn 1 NITRO point per 100 USDC of position
+size (wager x leverage), win or lose (`points_per_100_usd`, `points_min_hold_sec`); demo trades and the bonus
+balance earn none. At token launch, reserve a points pool (suggested 10% of supply), compute the pro-rata rate
+`pool / total points` from the $NITRO page, send the pool to the contract account and call
+`set_nitro_conversion(token, tokens_per_point, budget, max_per_account, daily_limit, true)` (token base units;
+points have 6 decimals). Conversions can never exceed `budget`; the per-wallet and daily caps spread the supply
+out. Failed transfers refund points and budget.
 
 **Withdrawals are reviewed.** Users request a withdrawal (the amount is locked and they can cancel); the
 owner approves on the website's **Admin** page (USDC is sent) or rejects with a reason (the amount returns).

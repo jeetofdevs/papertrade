@@ -264,8 +264,8 @@ function PoolOrderPanel({ market }: { market: Market }) {
           </dd>
         </div>
         <div>
-          <dt>NITRO at max loss</dt>
-          <dd className="mono">{compact(wager * 10)}</dd>
+          <dt>NITRO points (held 60s+)</dt>
+          <dd className="mono">{compact(fromBonus ? 0 : size / 100)}</dd>
         </div>
       </dl>
 

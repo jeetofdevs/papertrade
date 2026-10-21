@@ -94,7 +94,7 @@ export function Leaderboard() {
         <div className="panel pad">
           <h3>Top NITRO holders</h3>
           {nitroRows.length === 0 ? (
-            <p className="muted small">NITRO is earned on losing trades. Nobody has any yet.</p>
+            <p className="muted small">NITRO points are earned from trading volume. Nobody has any yet.</p>
           ) : (
             <ul className="holders">
               {nitroRows.map((r, i) => (

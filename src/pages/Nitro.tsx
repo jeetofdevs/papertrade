@@ -6,7 +6,8 @@ import { convertNitroAction, loadNitroStats, NitroStats, POOL_ID, refreshPool, t
 import { useWallet } from '../lib/wallet';
 import { Stat } from './Earn';
 
-const NITRO_PER_USDC = 10;
+/** NITRO points per 100 USDC of position size on real trades held 60s+. */
+const POINTS_PER_100 = 1;
 /** $NITRO total supply and the share of it set aside for NITRO points (split pro rata at conversion). */
 const SUPPLY = Number(import.meta.env.VITE_NITRO_SUPPLY ?? 1_000_000_000);
 const POINTS_SHARE = Number(import.meta.env.VITE_NITRO_POINTS_SHARE ?? 0.1);
@@ -73,11 +74,12 @@ export function Nitro() {
           <LogoMark size={88} />
         </div>
         <div>
-          <span className="eyebrow">$NITRO · loss mining</span>
-          <h1>Lose a trade. Keep the fuel.</h1>
+          <span className="eyebrow">$NITRO · volume mining</span>
+          <h1>Trade the size. Earn the fuel.</h1>
           <p>
-            Every USDC you lose trading real USDC on Nitro earns <b>{NITRO_PER_USDC} NITRO points</b>, recorded on chain in the Nitro
-            contract. Demo trades never count. When the <b>$NITRO</b> token launches, points convert into tokens here.
+            Every <b>$100 of position size</b> (wager × leverage) on a real USDC trade earns <b>{POINTS_PER_100} NITRO point</b>, win or lose,
+            recorded on chain in the Nitro contract. Demo trades never count. When the <b>$NITRO</b> token launches, points convert into tokens
+            here.
           </p>
         </div>
       </section>
@@ -96,16 +98,16 @@ export function Nitro() {
         </div>
         <ul className="rules-list">
           <li>
-            <b>Earn:</b> {NITRO_PER_USDC} NITRO points for every 1 USDC lost on a real USDC trade (max loss or a losing close). Wins, demo trades
-            and the display-only bonus earn none.
+            <b>Earn:</b> {POINTS_PER_100} NITRO point per $100 of position size (wager × leverage) on real USDC trades held at least 60 seconds,
+            win or lose. Example: $10 at 100x = $1,000 size = 10 points. Demo trades and the bonus balance earn none.
           </li>
           <li>
             <b>Points pool:</b> {(POINTS_SHARE * 100).toFixed(0)}% of the {compact(SUPPLY)} $NITRO supply ({compact(POINTS_POOL)} $NITRO) is
             reserved for NITRO points.
           </li>
           <li>
-            <b>Convert:</b> at launch the pool is split pro rata. Rate = {compact(POINTS_POOL)} $NITRO ÷ all points earned. The fewer points in
-            total, the more $NITRO each point gets.
+            <b>Convert:</b> at launch the pool is split pro rata: rate = {compact(POINTS_POOL)} $NITRO ÷ all points earned. Conversions can never
+            exceed the pool, and per-wallet and daily limits keep it fair and spread out.
           </li>
           <li>
             <b>Value:</b> $NITRO price = market cap ÷ {compact(SUPPLY)}. At a ${usd(5_000, 0)} launch market cap that is ${(5_000 / SUPPLY).toFixed(6)} per
@@ -149,10 +151,27 @@ export function Nitro() {
         <button className="btn btn-primary btn-block" disabled={!valid || busy} onClick={convert}>
           {busy ? 'Confirm in your wallet…' : open ? 'Convert to $NITRO' : 'Conversion opens at the $NITRO launch'}
         </button>
+        {open && decimals != null && stats && (
+          <dl className="summary">
+            <div>
+              <dt>Points pool left</dt>
+              <dd className="mono">{compact(Number(stats.budgetRaw) / 10 ** decimals)} $NITRO</dd>
+            </div>
+            <div>
+              <dt>Limit per wallet</dt>
+              <dd className="mono">{stats.maxPerAccountRaw === '0' ? 'none' : `${compact(Number(stats.maxPerAccountRaw) / 10 ** decimals)} $NITRO`}</dd>
+            </div>
+            <div>
+              <dt>Daily limit (everyone)</dt>
+              <dd className="mono">{stats.dailyLimitRaw === '0' ? 'none' : `${compact(Number(stats.dailyLimitRaw) / 10 ** decimals)} $NITRO`}</dd>
+            </div>
+          </dl>
+        )}
         <ul className="convert-notes muted small">
           <li>Points are safe on chain until then: nothing to claim now, just keep trading.</li>
           <li>Converting attaches 0.00125 NEAR so the token can register your wallet. If the transfer fails, your points come back.</li>
-          <li>Only real USDC trades earn points. Demo mode and quests in demo never count.</li>
+          <li>Only real USDC trades earn points. Demo mode never counts.</li>
+          <li>Conversions come from a fixed pool and have per-wallet and daily limits, so the supply released stays under control.</li>
         </ul>
       </section>
 
@@ -161,7 +180,7 @@ export function Nitro() {
           ['01', 'Deposit USDC', 'Connect a NEAR wallet and deposit real USDC.'],
           ['02', 'Trade', 'Long or short NEAR, BTC, ETH and SOL up to 1000x. Your wager is your max loss.'],
           ['03', 'Win in USDC', 'Profits are paid from the Nitro vault (10% fee on profit).'],
-          ['04', 'Lose into NITRO', `Every USDC lost earns ${NITRO_PER_USDC} NITRO points, convertible to $NITRO at launch.`],
+          ['04', 'Earn NITRO', `Every $100 of position size earns ${POINTS_PER_100} NITRO point, convertible to $NITRO at launch.`],
         ].map(([num, t, d]) => (
           <div key={num} className="panel step">
             <span className="step-n mono">{num}</span>
@@ -180,7 +199,7 @@ function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: 
   const tokensPerPoint = POINTS_POOL / totalPoints;
   const tokenPrice = mcap / SUPPLY;
   const pointValue = tokensPerPoint * tokenPrice;
-  const perDollarLost = pointValue * NITRO_PER_USDC;
+  const per1000Volume = pointValue * POINTS_PER_100 * 10;
   return (
     <div className="estimator">
       <div className="field-head">
@@ -207,8 +226,8 @@ function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: 
           <dd className="mono">{compact(tokensPerPoint)}</dd>
         </div>
         <div>
-          <dt>Value per 1 USDC lost</dt>
-          <dd className="mono accent">${perDollarLost < 0.01 ? perDollarLost.toFixed(4) : usd(perDollarLost)}</dd>
+          <dt>Value per $1,000 traded</dt>
+          <dd className="mono accent">${per1000Volume < 0.01 ? per1000Volume.toFixed(4) : usd(per1000Volume)}</dd>
         </div>
         <div>
           <dt>Your points now worth</dt>
