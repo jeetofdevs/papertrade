@@ -15,6 +15,14 @@ struct T {
 }
 
 impl T {
+    /// User asks to withdraw, owner approves. Returns the request id.
+    fn withdraw_approved(&mut self, who: &str, usdc: u128) -> u64 {
+        self.as_(who);
+        let id = self.c.request_withdraw(U128(usdc * USDC));
+        self.as_("owner.near");
+        let _ = self.c.approve_withdraw(id);
+        id
+    }
     fn new() -> Self {
         let mut t = T { c: Contract::new(acc("owner.near"), acc("usdc.near"), acc("oracle.near")), now: 1_000 * NANOS };
         t.as_("owner.near");
@@ -224,8 +232,7 @@ fn owner_cannot_take_more_than_fees() {
 #[test]
 fn withdraw_failure_refunds_balance() {
     let mut t = setup();
-    t.as_("alice.near");
-    let _ = t.c.withdraw(U128(100 * USDC));
+    t.withdraw_approved("alice.near", 100);
     assert_eq!(t.balance("alice.near"), 900 * USDC);
     t.as_("nitro.near");
     t.c.on_withdraw(acc("alice.near"), U128(100 * USDC), Err(PromiseError::Failed));
@@ -278,8 +285,7 @@ fn credit_check_that_raced_a_withdrawal_is_dropped() {
     let credits = vec![credit("x", "bob.near", 100)];
     let _ = t.c.credit_transfers(credits.clone());
     let seq = t.c.out_seq;
-    t.as_("alice.near");
-    let _ = t.c.withdraw(U128(100 * USDC));
+    t.withdraw_approved("alice.near", 100);
     t.as_("nitro.near");
     t.c.on_withdraw(acc("alice.near"), U128(100 * USDC), Ok(()));
     // Balance was read before Alice's $100 left, so it looks like $100 is unassigned. It is not.
@@ -291,8 +297,7 @@ fn credit_check_that_raced_a_withdrawal_is_dropped() {
 #[test]
 fn withdrawals_keep_the_books_balanced() {
     let mut t = setup();
-    t.as_("alice.near");
-    let _ = t.c.withdraw(U128(100 * USDC));
+    t.withdraw_approved("alice.near", 100);
     let p = t.c.get_pool();
     assert_eq!(p.accounted.0, 1_000_900 * USDC);
     assert_eq!(p.in_flight.0, 100 * USDC);
@@ -331,15 +336,15 @@ fn every_deposit_withdraw_and_trade_is_recorded_per_user() {
     t.price("NEAR", 3_150_000_00);
     t.as_("alice.near");
     t.c.close_position(id, None);
-    let _ = t.c.withdraw(U128(45 * USDC));
+    t.withdraw_approved("alice.near", 45);
     let l = t.c.get_ledger(acc("alice.near"), None, None);
     let kinds: Vec<&str> = l.iter().map(|e| e.kind.as_str()).collect();
-    assert_eq!(kinds, vec!["withdraw", "close", "open", "deposit"]); // newest first
+    assert_eq!(kinds, vec!["withdraw", "withdraw_request", "close", "open", "deposit"]); // newest first
     assert_eq!(l[0].amount.0, 45 * USDC);
-    assert_eq!(l[1].pnl.as_deref(), Some("50000000"));
-    assert_eq!(l[1].amount.0, 145 * USDC); // wager + profit - fee
-    assert_eq!(l[2].leverage, Some(10));
-    assert_eq!(l[3].amount.0, 1_000 * USDC);
+    assert_eq!(l[2].pnl.as_deref(), Some("50000000"));
+    assert_eq!(l[2].amount.0, 145 * USDC); // wager + profit - fee
+    assert_eq!(l[3].leverage, Some(10));
+    assert_eq!(l[4].amount.0, 1_000 * USDC);
     let a = t.c.get_account(acc("alice.near"));
     assert_eq!(a.total_deposited.0, 1_000 * USDC);
     assert_eq!(a.total_withdrawn.0, 45 * USDC);
@@ -402,4 +407,72 @@ fn tiny_deposits_are_refused() {
     let mut t = setup();
     t.as_("usdc.near");
     let _ = t.c.ft_on_transfer(acc("bob.near"), U128(10), "".into());
+}
+
+#[test]
+fn withdrawals_wait_for_owner_review() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.request_withdraw(U128(300 * USDC));
+    // Locked, not sent yet.
+    let a = t.c.get_account(acc("alice.near"));
+    assert_eq!(a.balance.0, 700 * USDC);
+    assert_eq!(a.pending_withdraw.0, 300 * USDC);
+    assert_eq!(t.c.get_pool().in_flight.0, 0);
+    let reqs = t.c.get_withdraw_requests(None, None);
+    assert_eq!(reqs.len(), 1);
+    assert_eq!(reqs[0].account, acc("alice.near"));
+    // Owner approves: USDC goes out.
+    t.as_("owner.near");
+    let _ = t.c.approve_withdraw(id);
+    let a = t.c.get_account(acc("alice.near"));
+    assert_eq!(a.pending_withdraw.0, 0);
+    assert_eq!(a.total_withdrawn.0, 300 * USDC);
+    assert_eq!(t.c.get_pool().in_flight.0, 300 * USDC);
+    assert!(t.c.get_withdraw_requests(None, None).is_empty());
+}
+
+#[test]
+fn rejected_or_cancelled_withdrawals_return_to_balance() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let a = t.c.request_withdraw(U128(100 * USDC));
+    let b = t.c.request_withdraw(U128(50 * USDC));
+    t.as_("owner.near");
+    t.c.reject_withdraw(a, Some("Please verify your account".into()));
+    t.as_("alice.near");
+    t.c.cancel_withdraw(b);
+    assert_eq!(t.balance("alice.near"), 1_000 * USDC);
+    assert_eq!(t.c.get_account(acc("alice.near")).pending_withdraw.0, 0);
+    let l = t.c.get_ledger(acc("alice.near"), None, Some(2));
+    assert_eq!(l[0].kind, "withdraw_cancelled");
+    assert_eq!(l[1].kind, "withdraw_rejected");
+    assert_eq!(l[1].reason.as_deref(), Some("Please verify your account"));
+}
+
+#[test]
+#[should_panic(expected = "Only the owner")]
+fn only_owner_approves_withdrawals() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.request_withdraw(U128(10 * USDC));
+    let _ = t.c.approve_withdraw(id);
+}
+
+#[test]
+#[should_panic(expected = "Not your request")]
+fn cannot_cancel_someone_elses_request() {
+    let mut t = setup();
+    t.as_("alice.near");
+    let id = t.c.request_withdraw(U128(10 * USDC));
+    t.as_("mallory.near");
+    t.c.cancel_withdraw(id);
+}
+
+#[test]
+#[should_panic(expected = "Not enough free balance")]
+fn cannot_request_more_than_balance() {
+    let mut t = setup();
+    t.as_("alice.near");
+    t.c.request_withdraw(U128(1_001 * USDC));
 }

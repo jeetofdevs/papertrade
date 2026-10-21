@@ -15,7 +15,7 @@
 //!   move trader balances or vault liquidity.
 
 use near_sdk::json_types::U128;
-use near_sdk::store::{LookupMap, LookupSet};
+use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{
     env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseError, PromiseOrValue,
 };
@@ -73,13 +73,27 @@ pub struct Account {
     pub profit: U128,
     pub loss: U128,
     pub trades: u32,
+    /// USDC locked in withdrawal requests waiting for review.
+    pub pending_withdraw: U128,
+}
+
+/// A withdrawal waiting for the owner's review.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct WithdrawRequest {
+    pub id: u64,
+    pub account: AccountId,
+    pub amount: U128,
+    /// Milliseconds since the Unix epoch.
+    pub requested_at: u64,
 }
 
 /// One line in a user's history: deposits, withdrawals, opens and closes.
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
 pub struct LedgerEntry {
-    /// deposit | withdraw | refund | vault_deposit | vault_withdraw | open | close
+    /// deposit | withdraw_request | withdraw | withdraw_rejected | withdraw_cancelled | refund
+    /// | vault_deposit | vault_withdraw | open | close
     pub kind: String,
     /// USDC moved: the deposit, the withdrawal, the wager on open, or the payout on close.
     pub amount: U128,
@@ -202,6 +216,8 @@ pub struct Contract {
     credit_pending: u64,
     credited: LookupSet<String>,
     ledger: LookupMap<AccountId, Vec<LedgerEntry>>,
+    withdraw_requests: IterableMap<u64, WithdrawRequest>,
+    next_withdraw_id: u64,
 }
 
 fn mul_div(a: u128, b: u128, c: u128) -> u128 {
@@ -246,6 +262,8 @@ impl Contract {
             credit_pending: 0,
             credited: LookupSet::new(b"c"),
             ledger: LookupMap::new(b"l"),
+            withdraw_requests: IterableMap::new(b"w"),
+            next_withdraw_id: 1,
         }
     }
 
@@ -286,15 +304,64 @@ impl Contract {
     }
 
     /// Withdraw free trading balance.
-    pub fn withdraw(&mut self, amount: U128) -> Promise {
+    /// Ask to withdraw free balance. The amount is locked until the owner approves (USDC is sent)
+    /// or rejects it (the amount returns to the balance). The user can cancel while it waits.
+    pub fn request_withdraw(&mut self, amount: U128) -> u64 {
         let who = env::predecessor_account_id();
         let mut acct = self.account(&who);
         require!(amount.0 > 0 && amount.0 <= acct.balance.0, "Not enough free balance");
+        let open = self.withdraw_requests.values().filter(|r| r.account == who).count();
+        require!(open < 5, "You already have 5 withdrawals waiting for review");
         acct.balance = U128(acct.balance.0 - amount.0);
-        acct.total_withdrawn = U128(acct.total_withdrawn.0 + amount.0);
+        acct.pending_withdraw = U128(acct.pending_withdraw.0 + amount.0);
         self.accounts.insert(who.clone(), acct);
-        self.log(&who, LedgerEntry::new("withdraw", amount.0));
-        self.send_usdc(who, amount.0)
+        let id = self.next_withdraw_id;
+        self.next_withdraw_id += 1;
+        self.withdraw_requests.insert(id, WithdrawRequest { id, account: who.clone(), amount, requested_at: env::block_timestamp_ms() });
+        let mut e = LedgerEntry::new("withdraw_request", amount.0);
+        e.position_id = Some(id);
+        self.log(&who, e);
+        env::log_str(&format!("EVENT_JSON:{{\"event\":\"withdraw_request\",\"id\":{},\"account\":\"{}\",\"amount\":\"{}\"}}", id, who, amount.0));
+        id
+    }
+
+    /// Cancel your own withdrawal request; the amount returns to your balance.
+    pub fn cancel_withdraw(&mut self, id: u64) {
+        let req = self.withdraw_requests.get(&id).cloned().expect("Request not found");
+        require!(env::predecessor_account_id() == req.account, "Not your request");
+        self.unlock_request(req, "withdraw_cancelled", None);
+    }
+
+    /// Owner: approve a request and send the USDC to the user.
+    pub fn approve_withdraw(&mut self, id: u64) -> Promise {
+        self.assert_owner();
+        let req = self.withdraw_requests.remove(&id).expect("Request not found");
+        let mut acct = self.account_or_default(&req.account);
+        acct.pending_withdraw = U128(acct.pending_withdraw.0 - req.amount.0);
+        acct.total_withdrawn = U128(acct.total_withdrawn.0 + req.amount.0);
+        self.accounts.insert(req.account.clone(), acct);
+        let mut e = LedgerEntry::new("withdraw", req.amount.0);
+        e.position_id = Some(id);
+        self.log(&req.account, e);
+        self.send_usdc(req.account, req.amount.0)
+    }
+
+    /// Owner: reject a request; the amount returns to the user's balance.
+    pub fn reject_withdraw(&mut self, id: u64, reason: Option<String>) {
+        self.assert_owner();
+        let req = self.withdraw_requests.get(&id).cloned().expect("Request not found");
+        self.unlock_request(req, "withdraw_rejected", reason.map(|r| r.chars().take(140).collect()));
+    }
+
+    /// Withdrawal requests waiting for review, oldest first.
+    pub fn get_withdraw_requests(&self, from_index: Option<u32>, limit: Option<u32>) -> Vec<WithdrawRequest> {
+        let mut list: Vec<WithdrawRequest> = self.withdraw_requests.values().cloned().collect();
+        list.sort_by_key(|r| r.id);
+        list.into_iter().skip(from_index.unwrap_or(0) as usize).take(limit.unwrap_or(100).min(200) as usize).collect()
+    }
+
+    pub fn get_owner(&self) -> AccountId {
+        self.owner.clone()
     }
 
     /// Burn vault shares for USDC. Only liquidity not reserved by open positions can leave.
@@ -321,6 +388,7 @@ impl Contract {
             // Transfer failed (for example the account is not registered on USDC): credit it back.
             let mut acct = self.account_or_default(&account);
             acct.balance = U128(acct.balance.0 + amount.0);
+            acct.total_withdrawn = U128(acct.total_withdrawn.0.saturating_sub(amount.0));
             self.accounts.insert(account.clone(), acct);
             self.log(&account, LedgerEntry::new("refund", amount.0));
         }
@@ -616,6 +684,18 @@ impl Contract {
 }
 
 impl Contract {
+    fn unlock_request(&mut self, req: WithdrawRequest, kind: &str, reason: Option<String>) {
+        self.withdraw_requests.remove(&req.id);
+        let mut acct = self.account_or_default(&req.account);
+        acct.pending_withdraw = U128(acct.pending_withdraw.0 - req.amount.0);
+        acct.balance = U128(acct.balance.0 + req.amount.0);
+        self.accounts.insert(req.account.clone(), acct);
+        let mut e = LedgerEntry::new(kind, req.amount.0);
+        e.position_id = Some(req.id);
+        e.reason = reason;
+        self.log(&req.account, e);
+    }
+
     fn log(&mut self, who: &AccountId, e: LedgerEntry) {
         let mut list = self.ledger.get(who).cloned().unwrap_or_default();
         list.push(e);
