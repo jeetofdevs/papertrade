@@ -46,8 +46,8 @@ const FAQ = [
     'The Nitro vault is the other side of every trade. Profits are paid from it in USDC; losses flow into it.',
   ],
   [
-    'What is $NITRO?',
-    'Every $100 of position size (wager x leverage) on a real USDC trade held at least a minute earns 1 NITRO point. Points convert to the $NITRO token at launch.',
+    'What is $NTR?',
+    'Every $100 of position size (wager x leverage) on a real USDC trade held at least a minute earns 1 NITRO point. Points convert to the $NTR token at launch.',
   ],
   [
     'Is this real money?',
@@ -216,7 +216,7 @@ export function Landing() {
           </h1>
           <p>
             Long or short NEAR, BTC, ETH and SOL in one tap. Set a take profit, ride the rocket, and every trade earns
-            $NITRO points.
+            $NTR points.
           </p>
           <div className="hero2-cta" ref={heroCta}>
             <button className="btn btn-primary btn-xl" onClick={connect} disabled={!ready}>
@@ -351,8 +351,8 @@ export function Landing() {
           </div>
           <div className="panel bento-card bento-nitro">
             <span className="bento-kicker">Volume mining</span>
-            <h3>Trade volume earns $NITRO</h3>
-            <p className="muted">1 NITRO point per $100 of position size on real trades. Points convert to $NITRO at launch.</p>
+            <h3>Trade volume earns $NTR</h3>
+            <p className="muted">1 NITRO point per $100 of position size on real trades. Points convert to $NTR at launch.</p>
           </div>
           <div className="panel bento-card bento-quests">
             <span className="bento-kicker">Quests</span>
@@ -439,7 +439,7 @@ export function Landing() {
             ['Now', 'Demo trading up to 1000x, take profit, quests, PnL cards, UWU mode', true],
             ['Now', 'Live trading with real USDC', true],
             ['Next', 'Nitro smart contract on NEAR with a USDC vault', false],
-            ['Next', '$NITRO token claims for loss-mined balances', false],
+            ['Next', '$NTR token claims for loss-mined balances', false],
             ['Later', 'More markets, trading competitions and referral rewards', false],
           ].map(([when, what, done], i) => (
             <li key={i} className={done ? 'rm-done' : ''}>

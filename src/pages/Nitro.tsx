@@ -8,7 +8,7 @@ import { Stat } from './Earn';
 
 /** NITRO points per 100 USDC of position size on real trades held 60s+. */
 const POINTS_PER_100 = 1;
-/** $NITRO total supply and the share of it set aside for NITRO points (split pro rata at conversion). */
+/** $NTR total supply and the share of it set aside for NITRO points (split pro rata at conversion). */
 const SUPPLY = Number(import.meta.env.VITE_NITRO_SUPPLY ?? 1_000_000_000);
 const POINTS_SHARE = Number(import.meta.env.VITE_NITRO_POINTS_SHARE ?? 0.1);
 const POINTS_POOL = SUPPLY * POINTS_SHARE;
@@ -16,7 +16,7 @@ const MCAPS = [5_000, 100_000, 1_000_000, 10_000_000];
 /** Used for the estimate until real points exist. */
 const EXAMPLE_TOTAL_POINTS = 1_000_000;
 
-/** NITRO points (earned on real USDC losses only) and their conversion to the $NITRO token. */
+/** NITRO points (earned on real USDC losses only) and their conversion to the $NTR token. */
 export function Nitro() {
   const { accountId, signAndSend } = useWallet();
   const pool = usePool();
@@ -57,7 +57,7 @@ export function Nitro() {
     setBusy(true);
     try {
       await signAndSend(POOL_ID, [convertNitroAction(n)]);
-      toast.ok(`Converted ${compact(n)} NITRO to $NITRO`);
+      toast.ok(`Converted ${compact(n)} NITRO to $NTR`);
       setAmount('');
       refreshPool();
     } catch (e) {
@@ -74,11 +74,11 @@ export function Nitro() {
           <LogoMark size={88} />
         </div>
         <div>
-          <span className="eyebrow">$NITRO · volume mining</span>
+          <span className="eyebrow">$NTR · volume mining</span>
           <h1>Trade the size. Earn the fuel.</h1>
           <p>
             Every <b>$100 of position size</b> (wager × leverage) on a real USDC trade earns <b>{POINTS_PER_100} NITRO point</b>, win or lose,
-            recorded on chain in the Nitro contract. Demo trades never count. Points convert into the <b>$NITRO</b> token here once conversion
+            recorded on chain in the Nitro contract. Demo trades never count. Points convert into the <b>$NTR</b> token here once conversion
             opens.
           </p>
         </div>
@@ -88,7 +88,7 @@ export function Nitro() {
         <Stat label="Your NITRO points" value={compact(mine)} accent />
         <Stat label="Share of all points" value={`${share.toFixed(2)}%`} />
         <Stat label="Total NITRO minted" value={compact(total)} />
-        <Stat label="Converted to $NITRO" value={compact(stats?.totalConverted ?? 0)} />
+        <Stat label="Converted to $NTR" value={compact(stats?.totalConverted ?? 0)} />
       </div>
 
       <section className="panel pad points-rules">
@@ -102,15 +102,15 @@ export function Nitro() {
             win or lose. Example: $10 at 100x = $1,000 size = 10 points. Demo trades and the bonus balance earn none.
           </li>
           <li>
-            <b>Points pool:</b> {(POINTS_SHARE * 100).toFixed(0)}% of the {compact(SUPPLY)} $NITRO supply ({compact(POINTS_POOL)} $NITRO) is
+            <b>Points pool:</b> {(POINTS_SHARE * 100).toFixed(0)}% of the {compact(SUPPLY)} $NTR supply ({compact(POINTS_POOL)} $NTR) is
             reserved for NITRO points.
           </li>
           <li>
-            <b>Convert:</b> at launch the pool is split pro rata: rate = {compact(POINTS_POOL)} $NITRO ÷ all points earned. Conversions can never
+            <b>Convert:</b> at launch the pool is split pro rata: rate = {compact(POINTS_POOL)} $NTR ÷ all points earned. Conversions can never
             exceed the pool, and per-wallet and daily limits keep it fair and spread out.
           </li>
           <li>
-            <b>Value:</b> $NITRO price = market cap ÷ {compact(SUPPLY)}. At a ${usd(5_000, 0)} launch market cap that is ${(5_000 / SUPPLY).toFixed(6)} per
+            <b>Value:</b> $NTR price = market cap ÷ {compact(SUPPLY)}. At a ${usd(5_000, 0)} launch market cap that is ${(5_000 / SUPPLY).toFixed(6)} per
             token.
           </li>
         </ul>
@@ -121,7 +121,7 @@ export function Nitro() {
         <div className="convert-head">
           <div>
             <span className="eyebrow">Convert</span>
-            <h2>NITRO points → $NITRO token</h2>
+            <h2>NITRO points → $NTR token</h2>
           </div>
           <span className={`convert-status ${open ? 'on' : ''}`}>{open ? 'Open' : 'Opens at token launch'}</span>
         </div>
@@ -143,27 +143,27 @@ export function Nitro() {
           </div>
           <div className="convert-box">
             <span className="label">You receive</span>
-            <b className="mono convert-out">{open && rate != null ? usd(n * rate, 4) : '—'} $NITRO</b>
-            <span className="muted small">{open && rate != null ? `1 NITRO = ${rate} $NITRO` : 'Rate announced at launch'}</span>
+            <b className="mono convert-out">{open && rate != null ? usd(n * rate, 4) : '—'} $NTR</b>
+            <span className="muted small">{open && rate != null ? `1 NITRO = ${rate} $NTR` : 'Rate announced at launch'}</span>
           </div>
         </div>
 
         <button className="btn btn-primary btn-block" disabled={!valid || busy} onClick={convert}>
-          {busy ? 'Confirm in your wallet…' : open ? 'Convert to $NITRO' : 'Conversion opens at the $NITRO launch'}
+          {busy ? 'Confirm in your wallet…' : open ? 'Convert to $NTR' : 'Conversion opens at the $NTR launch'}
         </button>
         {open && decimals != null && stats && (
           <dl className="summary">
             <div>
               <dt>Points pool left</dt>
-              <dd className="mono">{compact(Number(stats.budgetRaw) / 10 ** decimals)} $NITRO</dd>
+              <dd className="mono">{compact(Number(stats.budgetRaw) / 10 ** decimals)} $NTR</dd>
             </div>
             <div>
               <dt>Limit per wallet</dt>
-              <dd className="mono">{stats.maxPerAccountRaw === '0' ? 'none' : `${compact(Number(stats.maxPerAccountRaw) / 10 ** decimals)} $NITRO`}</dd>
+              <dd className="mono">{stats.maxPerAccountRaw === '0' ? 'none' : `${compact(Number(stats.maxPerAccountRaw) / 10 ** decimals)} $NTR`}</dd>
             </div>
             <div>
               <dt>Daily limit (everyone)</dt>
-              <dd className="mono">{stats.dailyLimitRaw === '0' ? 'none' : `${compact(Number(stats.dailyLimitRaw) / 10 ** decimals)} $NITRO`}</dd>
+              <dd className="mono">{stats.dailyLimitRaw === '0' ? 'none' : `${compact(Number(stats.dailyLimitRaw) / 10 ** decimals)} $NTR`}</dd>
             </div>
           </dl>
         )}
@@ -180,7 +180,7 @@ export function Nitro() {
           ['01', 'Deposit USDC', 'Connect a NEAR wallet and deposit real USDC.'],
           ['02', 'Trade', 'Long or short NEAR, BTC, ETH and SOL up to 1000x. Your wager is your max loss.'],
           ['03', 'Win in USDC', 'Profits are paid from the Nitro vault (10% fee on profit).'],
-          ['04', 'Earn NITRO', `Every $100 of position size earns ${POINTS_PER_100} NITRO point, convertible to $NITRO at launch.`],
+          ['04', 'Earn NITRO', `Every $100 of position size earns ${POINTS_PER_100} NITRO point, convertible to $NTR at launch.`],
         ].map(([num, t, d]) => (
           <div key={num} className="panel step">
             <span className="step-n mono">{num}</span>
@@ -203,7 +203,7 @@ function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: 
   return (
     <div className="estimator">
       <div className="field-head">
-        <span className="label">Estimate at a $NITRO market cap of</span>
+        <span className="label">Estimate at a $NTR market cap of</span>
       </div>
       <div className="row-chips">
         {MCAPS.map((m) => (
@@ -214,7 +214,7 @@ function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: 
       </div>
       <dl className="summary">
         <div>
-          <dt>$NITRO price</dt>
+          <dt>$NTR price</dt>
           <dd className="mono">${tokenPrice < 0.0001 ? tokenPrice.toFixed(7) : tokenPrice.toFixed(5)}</dd>
         </div>
         <div>
@@ -222,7 +222,7 @@ function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: 
           <dd className="mono">{compact(totalPoints)}</dd>
         </div>
         <div>
-          <dt>$NITRO per point</dt>
+          <dt>$NTR per point</dt>
           <dd className="mono">{compact(tokensPerPoint)}</dd>
         </div>
         <div>
@@ -232,7 +232,7 @@ function PointsEstimator({ mine, total, mcap, setMcap }: { mine: number; total: 
         <div>
           <dt>Your points now worth</dt>
           <dd className="mono">
-            {compact(mine * tokensPerPoint)} $NITRO ≈ ${usd(mine * pointValue)}
+            {compact(mine * tokensPerPoint)} $NTR ≈ ${usd(mine * pointValue)}
           </dd>
         </div>
       </dl>

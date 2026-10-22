@@ -30,7 +30,7 @@ const ROUTES = {
   trade: { label: 'Trade', el: <Trade /> },
   quests: { label: 'Quests', el: <Quests /> },
   leaderboard: { label: 'Leaderboard', el: <Leaderboard /> },
-  nitro: { label: '$NITRO', el: <Nitro /> },
+  nitro: { label: '$NTR', el: <Nitro /> },
   profile: { label: 'Profile', el: <Profile /> },
   admin: { label: 'Admin', el: <Admin /> },
 } as const;

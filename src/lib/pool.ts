@@ -693,7 +693,7 @@ export interface NitroStats {
   totalMinted: number;
   totalConverted: number;
   token: string | null;
-  /** $NITRO tokens per NITRO point, in whole tokens (decimals applied when known). */
+  /** $NTR tokens per NITRO point, in whole tokens (decimals applied when known). */
   tokensPerPointRaw: string;
   /** Token base units still in the points pool, and per-account / daily caps (0 = none). */
   budgetRaw: string;
@@ -729,7 +729,7 @@ export async function tokenDecimals(token: string): Promise<number> {
   return (await view<{ decimals: number }>(token, 'ft_metadata')).decimals;
 }
 
-/** Convert NITRO points to $NITRO; attaches 0.00125 NEAR so the token can register the user. */
+/** Convert NITRO points to $NTR; attaches 0.00125 NEAR so the token can register the user. */
 export const convertNitroAction = (points: number) => call('convert_nitro', { points: toUsdc(points) }, 60, '1250000000000000000000');
 
 /** Real, network-wide Nitro numbers from the contract: all-time volume and current open interest. */
